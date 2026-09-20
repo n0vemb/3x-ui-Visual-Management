@@ -1,0 +1,20 @@
+{
+  "_说明": "复制本文件为 config.json 后填入真实信息。config.json 含敏感凭据，已被 .gitignore 排除，不会提交到仓库。",
+  "port": 8787,
+  "demo": true,
+  "pollInterval": 20,
+  "geoTTLHours": 168,
+  "dashboardKey": "",
+  "servers": [
+    {
+      "id": "example1",
+      "name": "美国 · 45.119.4.207",
+      "url": "https://45.119.4.207:面板端口",
+      "username": "admin",
+      "password": "面板密码（与 token 二选一，token 优先）",
+      "token": "",
+      "insecure": true,
+      "enabled": true
+    }
+  ]
+}

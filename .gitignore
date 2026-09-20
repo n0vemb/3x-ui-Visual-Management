@@ -1,0 +1,11 @@
+# 敏感配置（含面板账密 / Token / 看板密码），绝不入库
+config.json
+geo_cache.json
+
+# 系统与编辑器
+.DS_Store
+*.log
+nohup.out
+
+# 依赖（本项目零依赖，防御性排除）
+node_modules/

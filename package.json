@@ -1,0 +1,13 @@
+{
+  "name": "xui-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "3X-UI/X-UI multi-server relationship dashboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

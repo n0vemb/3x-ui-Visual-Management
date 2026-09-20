@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3X-UI 多服务器看板 · 实时关系可视化</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; overflow:hidden; }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+    background:#F5F6FA; color:#1C1C1E; display:flex; flex-direction:column;
+  }
+  /* ===== 顶栏 ===== */
+  header { display:flex; justify-content:space-between; align-items:center; padding:16px 24px 6px; }
+  h1 { font-size:20px; font-weight:700; }
+  .sub { font-size:12px; color:#A5A8B5; margin-top:3px; }
+  .stats { display:flex; gap:10px; }
+  .stat { background:#fff; border:1px solid #E4E7EE; border-radius:8px; padding:9px 14px; display:flex; gap:8px; align-items:center; font-size:12px; color:#9BA1AF; }
+  .stat b { font-size:15px; font-weight:700; }
+  .v-blue{color:#4262FF} .v-teal{color:#0FBCB0} .v-dark{color:#1C1C1E} .v-green{color:#00B473} .v-red{color:#E5484D}
+  /* ===== 标签页 ===== */
+  .tabs { display:flex; gap:8px; padding:10px 24px 14px; align-items:center; flex-wrap:wrap; }
+  .tab { display:flex; gap:8px; align-items:center; padding:8px 14px; border-radius:8px; font-size:13px; color:#555A6A; cursor:pointer; user-select:none; }
+  .tab.active { background:#fff; border:1px solid #E4E7EE; font-weight:600; color:#1C1C1E; box-shadow:0 2px 6px rgba(28,28,46,.05); }
+  .tab:not(.active):hover { background:#EDEFF4; }
+  .tab .d { width:7px; height:7px; border-radius:99px; flex:none; }
+  .d-ok{background:#00B473} .d-warn{background:#F59E0B} .d-err{background:#E5484D}
+  .addTab { width:32px; height:32px; border-radius:8px; background:#fff; border:1px solid #E4E7EE; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#555A6A; font-size:16px; }
+  .addTab:hover{ background:#EDEFF4; }
+  /* ===== 画布 ===== */
+  .canvas-wrap { flex:1; margin:0 24px 20px; position:relative; border:1px solid #E4E7EE; border-radius:12px; overflow:hidden;
+    background:linear-gradient(135deg,#ffffff 0%,#EDEFF4 100%); }
+  svg#view { width:100%; height:100%; display:block; cursor:grab; }
+  svg#view.panning { cursor:grabbing; }
+  #boot { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#A5A8B5; font-size:13px; }
+  /* SVG 元素样式 */
+  .ib { cursor:grab; }
+  .ib:active { cursor:grabbing; }
+  .ib .core { fill:url(#pg); stroke:#C7D2FE; stroke-width:1.2; transition:stroke .15s; }
+  .ib.disabled .core { fill:#EEF0F5; stroke:#C4C9D4; }
+  .ib .core.hl { stroke:#0EA5E9; stroke-width:2.5; }
+  .ib .badge { fill:#4262FF; }
+  .ib .badgeT { fill:#fff; font-size:10px; font-weight:700; text-anchor:middle; font-family:inherit; pointer-events:none; }
+  .ib .sdot { pointer-events:none; }
+  .ib .lbl { font-size:11px; fill:#555A6A; font-family:inherit; pointer-events:none; }
+  .ib.disabled .lbl { fill:#B0B5C1; }
+  .orbit { fill:none; stroke:#B9C4F5; stroke-width:1.5; stroke-dasharray:5 7; }
+  .mainline { fill:none; stroke:#4262FF; stroke-width:2; stroke-linecap:round; }
+  .mainline.glow { stroke-opacity:.15; stroke-width:8; }
+  .flow { fill:none; stroke:#4262FF; stroke-width:2; stroke-linecap:round; stroke-dasharray:2 12; animation:dash 1.4s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset:-28; } }
+  .hoverline { fill:none; stroke:#0EA5E9; stroke-width:2; stroke-dasharray:4 5; stroke-linecap:round; }
+  .pdot { fill:#0EA5E9; }
+  /* 出站尾巴卡 */
+  .obcard { width:150px; background:rgba(255,255,255,.94); border:1px solid #D9E1F8; border-radius:12px; padding:8px 11px; box-shadow:0 4px 14px rgba(66,98,255,.12); font-size:11px; cursor:grab; }
+  .obcard:active { cursor:grabbing; }
+  .obcard .r1 { display:flex; align-items:center; gap:6px; }
+  .obcard .flag { font-size:14px; }
+  .obcard .tag { font-size:12.5px; font-weight:600; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .obcard .chipTag { font-size:9px; padding:1px 5px; border-radius:4px; }
+  .c-teal{background:#E6F7F6;color:#0F9B90} .c-warn{background:#FEF3E2;color:#D97706}
+  .obcard .r2 { margin-top:4px; color:#555A6A; font-size:10.5px; }
+  .obcard.disabled { background:#FBFBFC; box-shadow:none; }
+  .obcard.disabled .tag, .obcard.disabled .r2 { color:#9BA1AF; }
+  /* 客户端 chip */
+  .chipF { overflow:visible; }
+  .chip { width:150px; background:#fff; border:1px solid #E4E7EE; border-radius:10px; padding:8px 11px; box-shadow:0 4px 12px rgba(28,28,46,.07); cursor:grab; transition:box-shadow .15s, border-color .15s; }
+  .chip:active { cursor:grabbing; }
+  .chip:hover { border-color:#0EA5E9; box-shadow:0 0 0 3px rgba(14,165,233,.18); }
+  .chip.dis { background:#FBFBFC; }
+  .chip .r1 { display:flex; align-items:center; gap:6px; }
+  .chip .dot { width:8px; height:8px; border-radius:99px; flex:none; }
+  .st-online{background:#00B473} .st-offline{background:#C4C9D4} .st-exhausted{background:#E5484D}
+  .chip .nm { font-size:12px; font-weight:600; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chip.dis .nm { color:#9BA1AF; }
+  .chip .tgl { width:24px; height:14px; border-radius:99px; position:relative; flex:none; }
+  .tgl.on { background:#4262FF; } .tgl.off { background:#E4E7EE; }
+  .tgl::after { content:''; position:absolute; top:2px; width:10px; height:10px; border-radius:99px; background:#fff; }
+  .tgl.on::after { right:2px; } .tgl.off::after { left:2px; }
+  .chip .r2 { display:flex; justify-content:space-between; margin-top:4px; font-size:11px; }
+  .chip .tr { color:#9BA1AF; } .chip.dis .tr { color:#B0B5C1; }
+  .dy-ok{color:#00B473} .dy-warn{color:#D97706} .dy-red{color:#E5484D}
+  /* ===== 浮层 ===== */
+  #tooltip { position:fixed; z-index:50; background:#1C1C1E; color:#fff; font-size:11px; padding:5px 10px; border-radius:6px; pointer-events:none; display:none; white-space:nowrap; }
+  .legend { position:absolute; left:16px; bottom:16px; background:#fff; border:1px solid #E4E7EE; border-radius:10px; padding:10px 14px; font-size:11px; color:#555A6A; display:flex; flex-direction:column; gap:6px; box-shadow:0 4px 12px rgba(28,28,46,.06); }
+  .legend .row { display:flex; gap:8px; align-items:center; }
+  .lg-dot{width:7px;height:7px;border-radius:99px}
+  .lg-line{width:20px;height:8px}
+  .zoomHint { position:absolute; right:16px; bottom:16px; background:#fff; border:1px solid #E4E7EE; border-radius:99px; padding:6px 12px; font-size:11px; color:#555A6A; box-shadow:0 4px 12px rgba(28,28,46,.06); }
+  .btn { position:absolute; background:#fff; border:1px solid #E4E7EE; border-radius:8px; padding:6px 12px; font-size:12px; color:#555A6A; cursor:pointer; }
+  .btn:hover{background:#EDEFF4}
+  /* ===== 服务器管理弹窗 ===== */
+  .modal-mask { position:fixed; inset:0; background:rgba(28,28,46,.4); z-index:100; display:none; align-items:center; justify-content:center; }
+  .modal { width:660px; max-width:92vw; max-height:86vh; overflow:auto; background:#fff; border-radius:14px; padding:20px 22px; box-shadow:0 20px 60px rgba(28,28,46,.25); }
+  .modal h2 { font-size:16px; margin-bottom:14px; display:flex; align-items:center; }
+  .srv-row { border:1px solid #E4E7EE; border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:center; margin-bottom:8px; }
+  .srv-row .info { flex:1; min-width:0; }
+  .srv-row .nm { font-weight:600; font-size:13px; display:flex; gap:8px; align-items:center; }
+  .srv-row .url { font-size:11px; color:#9BA1AF; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .sbtn { border:1px solid #E4E7EE; background:#fff; border-radius:7px; padding:5px 11px; font-size:12px; color:#555A6A; cursor:pointer; flex:none; }
+  .sbtn:hover{background:#EDEFF4}
+  .sbtn.pri { background:#4262FF; color:#fff; border-color:#4262FF; }
+  .sbtn.pri:hover { background:#3350E0; }
+  .sbtn.dgr { color:#E5484D; }
+  .sbtn.dgr:hover { background:#FEECEC; }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; margin-top:14px; border-top:1px dashed #E4E7EE; padding-top:14px; }
+  .fld { display:flex; flex-direction:column; gap:4px; font-size:11px; color:#9BA1AF; }
+  .fld input[type=text], .fld input[type=password], .fld input:not([type]) { border:1px solid #E4E7EE; border-radius:7px; padding:7px 9px; font-size:13px; font-family:inherit; outline:none; }
+  .fld input:focus { border-color:#4262FF; }
+  .fld.full { grid-column:1/-1; }
+  .fld .chk { display:flex; gap:6px; align-items:center; font-size:12px; color:#555A6A; cursor:pointer; }
+  .testMsg { font-size:12px; }
+  .testMsg.ok { color:#00B473; } .testMsg.err { color:#E5484D; }
+  .modal .foot { border-top:1px dashed #E4E7EE; margin-top:14px; padding-top:12px; display:flex; gap:8px; align-items:center; font-size:12px; color:#555A6A; }
+  .hint11 { font-size:11px; color:#B0B5C1; margin-top:2px; }
+  /* ===== 访问密码门禁 ===== */
+  #gate { position:fixed; inset:0; z-index:200; background:linear-gradient(135deg,#EDEFF4 0%,#DDE3F0 100%); display:none; align-items:center; justify-content:center; }
+  #gate .gcard { width:340px; background:#fff; border-radius:14px; box-shadow:0 20px 60px rgba(28,28,46,.18); padding:30px 28px 22px; text-align:center; }
+  #gate h2 { font-size:18px; }
+  #gate .gsub { font-size:12px; color:#9BA1AF; margin:6px 0 16px; }
+  #gate input { width:100%; border:1px solid #E4E7EE; border-radius:8px; padding:10px 12px; font-size:14px; text-align:center; outline:none; }
+  #gate input:focus { border-color:#4262FF; }
+  #gate button { width:100%; margin-top:10px; border:none; border-radius:8px; padding:10px 0; font-size:14px; font-weight:600; color:#fff; background:#4262FF; cursor:pointer; }
+  #gate button:hover { background:#3350E0; }
+  #gate .gerr { color:#E5484D; font-size:12px; min-height:18px; margin-top:8px; }
+  /* ===== 标签「转到面板」 ===== */
+  .tab .jump { font-size:12px; color:#9BA1AF; padding:1px 4px; border-radius:5px; margin-left:2px; }
+  .tab .jump:hover { background:#E4E9F8; color:#4262FF; }
+  /* ===== 出站备注气泡 ===== */
+  .obnote { width:170px; min-height:30px; background:#FFF9E6; border:1px solid #F0DFA3; border-radius:10px; padding:6px 10px; font-size:11px; color:#8A6D1A; cursor:text; position:relative; box-shadow:0 3px 8px rgba(28,28,46,.07); line-height:1.4; word-break:break-all; }
+  .obnote::after { content:''; position:absolute; left:26px; bottom:-5px; width:9px; height:9px; background:#FFF9E6; border-right:1px solid #F0DFA3; border-bottom:1px solid #F0DFA3; transform:rotate(45deg); }
+  .obnote:hover { border-color:#D9B94A; }
+  .obnote .nadd { color:#C9B77A; }
+  .obnote .ninput { width:100%; border:none; outline:none; background:transparent; font-size:11px; font-family:inherit; color:#6B5410; padding:0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>面板看板</h1>
+    <div class="sub">多服务器 3X-UI 面板 · 入站 → 出站 关系总览 · 数据自动刷新</div>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="tabs" id="tabs"></div>
+
+<div class="canvas-wrap">
+  <svg id="view"><g id="world"></g></svg>
+  <div id="boot">正在连接看板后端…（请确认 server.js 正在运行）</div>
+  <div class="legend">
+    <div class="row"><span class="lg-dot" style="background:#00B473"></span>在线<span class="lg-dot" style="background:#C4C9D4;margin-left:10px"></span>离线<span class="lg-dot" style="background:#E5484D;margin-left:10px"></span>流量耗尽/已到期</div>
+    <div class="row"><span class="tgl off" style="width:18px;height:10px"></span>开关关闭 = 已停用</div>
+    <div class="row"><svg class="lg-line" viewBox="0 0 20 8"><path d="M1 4H19" stroke="#4262FF" stroke-width="2"/></svg>实线 · 入站星球 → 出站尾巴（支持多对一）</div>
+    <div class="row"><span style="font-size:12px">🪐</span>星球旁一圈小行星 = 该入站的客户端 · 点击星球展开信息卡</div>
+    <div class="row"><svg class="lg-line" viewBox="0 0 20 8"><path d="M1 4H19" stroke="#0EA5E9" stroke-width="2" stroke-dasharray="4 4"/></svg>虚线 · 悬停查看关联</div>
+    <div class="row"><span style="font-size:12px">✋</span>按住拖动节点 / 卡片 · 拖入站时客户端跟随 · 位置自动记忆</div>
+  </div>
+  <div class="zoomHint" id="zoomHint"></div>
+  <button class="btn" style="right:16px; top:16px" onclick="manualRefresh()">手动刷新</button>
+  <button class="btn" style="right:100px; top:16px" onclick="resetView()">重置视图</button>
+  <button class="btn" style="right:184px; top:16px" onclick="resetLayout()">重置布局</button>
+  <button class="btn" style="right:268px; top:16px" id="btnExpand" onclick="toggleExpandAll()">一键展开</button>
+</div>
+
+<div id="tooltip"></div>
+
+<!-- 访问密码门禁 -->
+<div id="gate">
+  <div class="gcard">
+    <h2>🔒 面板看板</h2>
+    <div class="gsub">该看板已开启访问控制，请输入密码</div>
+    <input id="gateKey" type="password" placeholder="访问密码" autocomplete="off">
+    <button id="gateBtn">进入看板</button>
+    <div class="gerr" id="gateErr"></div>
+  </div>
+</div>
+
+<!-- 服务器管理弹窗 -->
+<div class="modal-mask" id="modalMask" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <h2>服务器管理 <span style="font-size:11px;color:#B0B5C1;font-weight:400;margin-left:8px">改动立即生效，无需重启</span></h2>
+    <div id="srvList"></div>
+    <div class="form-grid">
+      <input type="hidden" id="f_id">
+      <div class="fld"><label>名称 *</label><input id="f_name" placeholder="美国 · 1.2.3.4"></div>
+      <div class="fld"><label>面板地址 *</label><input id="f_url" placeholder="https://1.2.3.4:端口/路径"><div class="hint11">面板「URI 路径」也要带上</div></div>
+      <div class="fld"><label>用户名</label><input id="f_user" autocomplete="off"></div>
+      <div class="fld"><label>密码</label><input id="f_pass" type="password" autocomplete="new-password"><div class="hint11" id="f_pass_hint">已保存的密码不会回显，留空 = 不修改</div></div>
+      <div class="fld full"><label>API Token（新版 3x-ui：设置 → 安全 → API Token；填写后优先于账密）</label><input id="f_token" autocomplete="off"></div>
+      <div class="fld"><label class="chk"><input type="checkbox" id="f_insecure"> 自签证书（跳过 HTTPS 校验）</label></div>
+      <div class="fld"><label class="chk"><input type="checkbox" id="f_enabled" checked> 启用此服务器</label></div>
+      <div class="fld full" style="flex-direction:row;gap:8px;align-items:center">
+        <button class="sbtn pri" onclick="upsertServer()">保存服务器</button>
+        <button class="sbtn" onclick="testConn()">测试连接</button>
+        <button class="sbtn" onclick="clearForm()">清空表单</button>
+        <span class="testMsg" id="testMsg"></span>
+      </div>
+    </div>
+    <div class="foot">
+      <label class="chk"><input type="checkbox" id="demoToggle" onchange="saveDemo(this.checked)"> 演示模式（内置示例数据，不连真实面板）</label>
+      <span style="flex:1"></span>
+      <input id="f_dashkey" type="password" placeholder="看板访问密码" style="width:150px;border:1px solid #E4E7EE;border-radius:7px;padding:5px 8px;font-size:12px;outline:none" title="设置后打开看板需输入密码">
+      <button class="sbtn" onclick="saveDashKey()">保存密码</button>
+      <button class="sbtn dgr" id="btnClearKey" style="display:none" onclick="clearDashKey()">清除密码</button>
+      <button class="sbtn" onclick="closeSettings()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================== 实时数据层 ==================== */
+let SERVERS = {};          // id -> {id,label,dot,sys,updated,outbounds[],inbounds[]}
+let cur = null;
+let firstLoad = true;
+let pendingApply = null;   // 拖拽期间到达的新数据，松手后再应用
+const EXPSET = new Set();  // 展开状态（跨刷新保留）
+let POS = (() => { try { return JSON.parse(localStorage.getItem('xuidash.pos') || '{}'); } catch (e) { return {}; } })();
+let NOTES = (() => { try { return JSON.parse(localStorage.getItem('xuidash.notes') || '{}'); } catch (e) { return {}; } })(); // 出站备注气泡 {serverId:{obId:text}}
+let KEY = localStorage.getItem('xuidash.key') || '';
+
+function savePos() { localStorage.setItem('xuidash.pos', JSON.stringify(POS)); }
+function saveNotes() { localStorage.setItem('xuidash.notes', JSON.stringify(NOTES)); }
+function fmtBytes(n) {
+  if (n == null) return '—';
+  if (n < 1024) return n + ' B';
+  const u = ['KB', 'MB', 'GB', 'TB']; let i = -1, v = n;
+  do { v /= 1024; i++; } while (v >= 1024 && i < u.length - 1);
+  return v.toFixed(2) + ' ' + u[i];
+}
+function fmtDur(s) {
+  if (s == null) return '—';
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600);
+  return d > 0 ? `${d}天${h}小时` : `${h}小时`;
+}
+
+async function loadData() {
+  try {
+    const opt = { headers: {} };
+    if (KEY) opt.headers['X-Dash-Key'] = KEY;
+    const r = await fetch('/api/data', opt);
+    if (r.status === 401) { showGate(); return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    document.getElementById('boot').style.display = 'none';
+    if (dragEl || dragging) { pendingApply = data; return; }   // 拖拽中不打断
+    applyData(data);
+  } catch (e) {
+    const boot = document.getElementById('boot');
+    boot.style.display = 'flex';
+    boot.textContent = '连接后端失败：' + e.message + '（请确认 server.js 正在运行）';
+  }
+}
+
+async function manualRefresh() {
+  try {
+    const opt = { headers: {} };
+    if (KEY) opt.headers['X-Dash-Key'] = KEY;
+    const r = await fetch('/api/data?refresh=1', opt);
+    if (r.ok) { const d = await r.json(); applyData(d); }
+  } catch (e) {}
+}
+
+// 后端快照 → 看板数据结构
+function applyData(data) {
+  const next = {};
+  (data.servers || []).forEach(sv => {
+    // 内置出站（direct/block）没有入站绑定时不显示，减少无用尾巴
+    const boundTags = new Set((sv.inbounds || []).map(ib => ib.ob).filter(Boolean));
+    const outbounds = (sv.outbounds || [])
+      .filter(o => {
+        const builtin = o.proto === 'direct' || o.proto === 'block' || o.tag === 'direct' || o.tag === 'blocked';
+        return !(builtin && !boundTags.has(o.tag));
+      })
+      .map(o => {
+        const id = 'ob:' + o.tag;
+        return {
+          id, tag: o.tag,
+          ip: o.ip ? (o.port ? o.ip + ':' + o.port : o.ip) : (o.proto === 'direct' ? '本机直连' : (o.proto === 'block' ? '拦截' : '—')),
+          flag: o.flag || '🛰️',
+          proto: o.proto || '',
+          enabled: o.enabled !== false,
+          traffic: (o.up || 0) + (o.down || 0) ? fmtBytes((o.up || 0) + (o.down || 0)) : '',
+          x: 0, y: 0
+        };
+      });
+    const obIds = {};
+    outbounds.forEach(o => { obIds[o.id] = true; });
+    const inbounds = (sv.inbounds || []).map(ib => {
+      const obId = ib.ob && obIds['ob:' + ib.ob] ? 'ob:' + ib.ob : null;
+      const clients = (ib.clients || []).map(c => {
+        const used = (c.up || 0) + (c.down || 0);
+        let status = 'offline';
+        if (c.online) status = 'online';
+        else if ((c.total > 0 && used >= c.total) || (c.expiryTime > 0 && c.expiryTime <= Date.now())) status = 'exhausted';
+        return {
+          name: c.email,
+          enabled: c.enable !== false,
+          status,
+          traffic: fmtBytes(used) + ' / ' + (c.total ? fmtBytes(c.total) : '∞'),
+          days: c.expiryTime ? Math.max(0, Math.ceil((c.expiryTime - Date.now()) / 864e5)) : null
+        };
+      });
+      return {
+        id: 'ib:' + ib.id,
+        name: ib.remark || ib.tag || ('入站#' + ib.id),
+        port: ib.port,
+        enabled: ib.enable !== false,
+        ob: obId,
+        clients,
+        expanded: EXPSET.has('ib:' + ib.id),
+        x: 0, y: 0
+      };
+    });
+    next[sv.id] = {
+      id: sv.id, label: sv.name, url: sv.url || '',
+      dot: !sv.online ? 'err' : (sv.lastError ? 'warn' : ((sv.sys && sv.sys.xray === 'error') ? 'warn' : 'ok')),
+      sys: sv.sys, updated: sv.lastUpdate,
+      outbounds, inbounds
+    };
+  });
+  SERVERS = next;
+  if (!SERVERS[cur] || firstLoad) cur = Object.keys(SERVERS)[0] || null;
+  Object.values(SERVERS).forEach(layoutServer);
+  render();
+  if (firstLoad) { firstLoad = false; fitView(); }
+}
+
+/* ==================== 星系自动布局 ====================
+   横向流式布局：每个星系 = 左侧入站星球阵 + 右侧出站尾巴，从左到右流动、放不下换行。
+   单行星系横排（[★★ → 尾巴]），星球上下微错开避免连线穿过邻居，整体省高度。
+   手动拖过的位置（POS）优先于自动布局。 */
+function layoutServer(sv) {
+  const P = POS[sv.id] = POS[sv.id] || {};
+  const groups = {};
+  sv.outbounds.forEach(o => groups[o.id] = []);
+  const unbound = [];
+  sv.inbounds.forEach(ib => { if (ib.ob && groups[ib.ob]) groups[ib.ob].push(ib); else unbound.push(ib); });
+
+  // 手动位置优先
+  sv.inbounds.forEach(ib => { const p = P[ib.id]; if (p) { ib.x = p.x; ib.y = p.y; } });
+  sv.outbounds.forEach(o => { const p = P[o.id]; if (p) { o.x = p.x; o.y = p.y; o._moved = !!p.moved; } });
+
+  const SX = 240;        // 星球列间距
+  const SY = 240;        // 星球行间距（多行时）
+  const STAG = 90;       // 单行多星球时的上下错开量
+  const PAD = 130;       // 星系留白（含行星轨道环）
+  const TAIL_GAP = 210;  // 星块右缘 → 尾巴中心
+  const GAP = 130;       // 星系间距
+  const MAXW = 4300;     // 一行的最大宽度
+  let cx = 0, cy = 0, shelfH = 0;
+
+  const placeCluster = (members, ob) => {
+    const n = members.length;
+    if (!n) return;
+    const rows = n <= 4 ? 1 : Math.max(1, Math.ceil(Math.sqrt(n / 2.2)));
+    const cols = Math.ceil(n / rows);
+    const sbW = (cols - 1) * SX;
+    const vSpan = rows === 1 ? STAG : (rows - 1) * SY;
+    const leftE = sbW / 2 + PAD;
+    const rightE = ob ? sbW / 2 + TAIL_GAP + 95 : sbW / 2 + PAD;
+    const w = leftE + rightE;
+    const h = vSpan + PAD * 2;
+    if (cx > 0 && cx + w > MAXW) { cy += shelfH + GAP; cx = 0; shelfH = 0; }
+    const ox = cx + leftE;   // 星块中心 x
+    const oy = cy + h / 2;   // 星块中心 y
+    cx += w + GAP; shelfH = Math.max(shelfH, h);
+    members.forEach((ib, j) => {
+      const r = Math.floor(j / cols), c = j % cols;
+      const p = P[ib.id];
+      if (p) { ib.x = p.x; ib.y = p.y; return; }   // 手动拖过的不动
+      ib.x = ox + (c - (cols - 1) / 2) * SX;
+      ib.y = oy + (r - (rows - 1) / 2) * (rows > 1 ? SY : 0)
+           + (rows === 1 && cols > 1 ? (c % 2 ? STAG / 2 : -STAG / 2) : 0);
+    });
+    if (ob && !ob._moved) {
+      ob.x = ox + sbW / 2 + TAIL_GAP - 75;
+      ob.y = oy - 30;
+    }
+  };
+
+  sv.outbounds.forEach(o => placeCluster(groups[o.id], o));
+  if (unbound.length) placeCluster(unbound, null);
+}
+
+/* ==================== 状态 ==================== */
+let view = { x: 0, y: 0, s: 1 };
+const W = 1400, H = 880;
+let worldBounds = { x0: 0, y0: 0, x1: W, y1: H };
+const svg = document.getElementById('view');
+const world = document.getElementById('world');
+const tooltip = document.getElementById('tooltip');
+
+/* ==================== 工具 ==================== */
+function obMap(sv){ const m={}; sv.outbounds.forEach(o=>m[o.id]=o); return m; }
+// 入站→出站 连线路径：放射状辐条 —— 每条线从尾巴卡外缘「朝向自己星球」的角度进出，
+// 星球在哪个方向就从哪边汇入。同一尾巴的所有辐条各占一个角度扇区，几何上不可能交叉。
+function linePath(ib, ob){
+  const cx = ob.x + 75, cy = ob.y + 30;            // 尾巴中心
+  const dx = ib.x - cx, dy = ib.y - cy;
+  const dist = Math.hypot(dx, dy) || 1;
+  const ux = dx/dist, uy = dy/dist;
+  const x1 = ib.x - ux*28, y1 = ib.y - uy*28;      // 星球边缘起点
+  const halfW = 80, halfH = 35;                    // 尾巴卡半宽/半高 + 余量
+  const t = Math.min(halfW/Math.max(1e-6, Math.abs(ux)), halfH/Math.max(1e-6, Math.abs(uy)));
+  const x2 = cx + ux*(t+2), y2 = cy + uy*(t+2);    // 尾巴外缘汇入点（朝星球方向）
+  const bend = ib._bend || 0;
+  const mx = cx + ux*dist*0.5 - uy*bend;           // 控制点：射线中点 + 垂直偏移
+  const my = cy + uy*dist*0.5 + ux*bend;
+  return `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`;
+}
+// 计算每个尾巴的辐条弯曲量：按汇入角度排序，弯向与邻线角差更大的一侧
+function computeBends(sv){
+  const om = obMap(sv), byOb = {};
+  sv.inbounds.forEach(ib=>{
+    if(ib._li<0) return;
+    (byOb[ib.ob] = byOb[ib.ob] || []).push(ib);
+  });
+  Object.values(byOb).forEach(arr=>{
+    const ob = om[arr[0].ob], cx = ob.x+75, cy = ob.y+30;
+    arr.forEach(ib=>{ ib._ang = Math.atan2(ib.y-cy, ib.x-cx); });
+    arr.sort((a,b)=>a._ang-b._ang);
+    arr.forEach((ib,i)=>{
+      const prev = arr[(i-1+arr.length)%arr.length], next = arr[(i+1)%arr.length];
+      let gl = ib._ang - prev._ang; if(gl<=0) gl += Math.PI*2;
+      let gr = next._ang - ib._ang; if(gr<=0) gr += Math.PI*2;
+      const dist = Math.hypot(ib.x-cx, ib.y-cy);
+      const m = Math.min(12, Math.min(gl,gr) * dist * 0.5);
+      ib._bend = gl > gr ? m : -m;
+    });
+  });
+}
+function inboundDot(ib){
+  if(!ib.enabled) return '#C4C9D4';
+  return ib.clients.some(c=>c.status==='exhausted') ? '#E5484D' : '#00B473';
+}
+function daysInfo(c){
+  if(!c.enabled) return ['已停用','dy-warn'];
+  if(c.status==='exhausted') return ['流量耗尽','dy-red'];
+  if(c.days===null||c.days===undefined) return ['无限期','dy-ok'];
+  const cls = c.days<=10 ? 'dy-warn' : 'dy-ok';
+  return [`剩余 ${c.days} 天`, cls];
+}
+
+/* ==================== 渲染 ==================== */
+function render(){
+  const sv = SERVERS[cur];
+  if(!sv) return;
+  const om = obMap(sv);
+  renderTabs(); renderStats(sv);
+
+  // 按出站分组（多对一连线错开用）；客户端行星位置 = 星球周围轨道环 r=115
+  const groups = {};
+  sv.outbounds.forEach(ob=>groups[ob.id]=[]);
+  sv.inbounds.forEach(ib=>{
+    const ob = om[ib.ob];
+    ib._li = (ib.enabled && ob && ob.enabled) ? groups[ib.ob].push(ib)-1 : -1;
+    ib._n  = ib._li>=0 ? groups[ib.ob].length : 0;
+    ib._chips = [];
+    const n = ib.clients.length;
+    ib.clients.forEach((c,i)=>{
+      const ang = (-90 + (i+0.5)*360/n) * Math.PI/180;
+      const p = { x: ib.x + Math.cos(ang)*115, y: ib.y + Math.sin(ang)*115 };
+      // 手动拖过的客户端卡偏移量
+      const off = (POS[sv.id]||{})[ib.id+'#'+i];
+      if(off){ p.x += off.dx; p.y += off.dy; }
+      ib._chips.push(p);
+    });
+  });
+
+  computeBends(sv);   // 辐条错峰弯曲，首次绘制也要算
+
+  let main='', nodes='', chips='', obs='';
+
+  // 出站小尾巴卡 + 备注气泡（气泡在卡片上方，随卡片一起拖动）
+  sv.outbounds.forEach(ob=>{
+    const note = (NOTES[cur]||{})[ob.id] || '';
+    obs += `<foreignObject data-obnote="${ob.id}" x="${ob.x-10}" y="${ob.y-46}" width="170" height="40" style="overflow:visible">
+      <div class="obnote" xmlns="http://www.w3.org/1999/xhtml" title="点击编辑备注（回车保存）">${note ? esc(note) : '<span class="nadd">＋ 备注</span>'}</div></foreignObject>`;
+    obs += `<foreignObject data-ob="${ob.id}" x="${ob.x}" y="${ob.y}" width="150" height="60" style="overflow:visible">
+      <div class="obcard ${ob.enabled?'':'disabled'}" xmlns="http://www.w3.org/1999/xhtml">
+        <div class="r1"><span class="flag">${ob.flag}</span><span class="tag">${ob.tag}</span>
+          ${ob.enabled?`<span class="chipTag c-teal">${ob.proto}</span>`:`<span class="chipTag c-warn">未启用</span>`}</div>
+        <div class="r2">${ob.ip}${ob.traffic?' · '+ob.traffic:''}</div>
+      </div></foreignObject>`;
+  });
+
+  // 主连线：星球 → 尾巴，曲线汇流
+  sv.inbounds.forEach(ib=>{
+    if(ib._li<0) return;
+    const ob = om[ib.ob];
+    const d = linePath(ib, ob);
+    main += `<path class="mainline glow" d="${d}"/><path class="mainline" d="${d}"/><path class="flow" d="${d}"/>`;
+  });
+
+  // 入站大星球（常驻轨道环 + 客户端小行星点，展开后换成信息卡）
+  sv.inbounds.forEach(ib=>{
+    const dot = inboundDot(ib);
+    const dots = ib.expanded ? '' : ib.clients.map((c,i)=>{
+      const p = ib._chips[i];
+      const col = !c.enabled ? '#E4E7EE' : (c.status==='online' ? '#00B473' : (c.status==='exhausted' ? '#E5484D' : '#C4C9D4'));
+      return `<circle cx="${(p.x-ib.x).toFixed(1)}" cy="${(p.y-ib.y).toFixed(1)}" r="6.5" fill="${col}" stroke="#fff" stroke-width="1.5"/>`;
+    }).join('');
+    nodes += `<g class="ib ${ib.enabled?'':'disabled'}" data-ib="${ib.id}" transform="translate(${ib.x},${ib.y})">
+      <circle class="orbit" r="115" opacity="${ib.expanded?1:0.45}"/>
+      ${ib.expanded
+        ? '<circle r="44" fill="rgba(66,98,255,0.08)"/><circle r="36" fill="rgba(66,98,255,0.12)"/>'
+        : '<circle r="33" fill="rgba(66,98,255,0.08)"/>'}
+      <circle class="core" r="26"/>
+      <circle class="badge" cx="19" cy="-19" r="9"/>
+      <text class="badgeT" x="19" y="-15">${ib.clients.length}</text>
+      <circle class="sdot" cx="-19" cy="-19" r="4.5" fill="${dot}"/>
+      ${dots}
+      <text class="lbl" y="47" text-anchor="middle">${ib.name}</text>
+    </g>`;
+  });
+
+  // 客户端信息卡（仅展开的，替换轨道上的小行星点）
+  sv.inbounds.forEach(ib=>{
+    if(!ib.expanded) return;
+    ib.clients.forEach((c,i)=>{
+      const p = ib._chips[i];
+      const [dLabel,dCls] = daysInfo(c);
+      chips += `<foreignObject class="chipF" data-chip="${ib.id}|${i}" x="${p.x-75}" y="${p.y-23}" width="150" height="46" style="overflow:visible">
+        <div class="chip ${c.enabled?'':'dis'}" xmlns="http://www.w3.org/1999/xhtml">
+          <div class="r1"><span class="dot st-${c.status}"></span><span class="nm">${c.name}</span><span class="tgl ${c.enabled?'on':'off'}"></span></div>
+          <div class="r2"><span class="tr">${c.traffic}</span><span class="dy ${dCls}">${dLabel}</span></div>
+        </div></foreignObject>`;
+    });
+  });
+
+  world.innerHTML = `
+    <defs><radialGradient id="pg" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#8FA6FF"/><stop offset="55%" stop-color="#4262FF"/><stop offset="100%" stop-color="#2141B0"/>
+    </radialGradient></defs>
+    <g id="lyMain">${main}</g>
+    <g id="lyHover"></g>
+    <g id="lyNodes">${nodes}</g>
+    <g id="lyChips">${chips}</g>
+    <g id="lyObs">${obs}</g>`;
+  updateWorldBounds(sv);
+  bindEvents(sv);
+  // 一键展开/收起按钮状态
+  const all = sv.inbounds.length > 0 && sv.inbounds.every(ib=>ib.expanded);
+  const be = document.getElementById('btnExpand');
+  if(be) be.textContent = all ? '一键收起' : '一键展开';
+  // 备注气泡：点击进入编辑
+  svg.querySelectorAll('[data-obnote]').forEach(f=>{
+    f.addEventListener('click', ()=>{
+      if(f.querySelector('input')) return;
+      const obId = f.dataset.obnote;
+      const note = (NOTES[cur]||{})[obId] || '';
+      f.innerHTML = `<input class="ninput" value="${esc(note)}" placeholder="备注，回车保存">`;
+      const inp = f.querySelector('input');
+      inp.focus(); inp.select();
+      let fin = false;
+      const done = save=>{
+        if(fin) return; fin = true;
+        if(save){
+          const v = inp.value.trim();
+          NOTES[cur] = NOTES[cur] || {};
+          if(v) NOTES[cur][obId] = v; else delete NOTES[cur][obId];
+          saveNotes();
+        }
+        render();
+      };
+      inp.addEventListener('keydown', ev=>{
+        if(ev.key==='Enter') done(true);
+        else if(ev.key==='Escape') done(false);
+      });
+      inp.addEventListener('blur', ()=>done(true));
+    });
+  });
+}
+
+// 按内容实际范围更新世界包围盒（星球含轨道/信息卡余量 200，尾巴含卡尺寸）
+function updateWorldBounds(sv){
+  let x0=1e9, y0=1e9, x1=-1e9, y1=-1e9;
+  sv.inbounds.forEach(ib=>{
+    x0=Math.min(x0,ib.x-200); x1=Math.max(x1,ib.x+200);
+    y0=Math.min(y0,ib.y-200); y1=Math.max(y1,ib.y+200);
+  });
+  sv.outbounds.forEach(ob=>{
+    x0=Math.min(x0,ob.x-20); x1=Math.max(x1,ob.x+170);
+    y0=Math.min(y0,ob.y-64); y1=Math.max(y1,ob.y+80);   // 上方留出备注气泡高度
+  });
+  worldBounds = { x0:Math.min(x0,0), y0:Math.min(y0,0), x1:Math.max(x1,W), y1:Math.max(y1,H) };
+}
+
+function renderTabs(){
+  const el = document.getElementById('tabs');
+  el.innerHTML = Object.entries(SERVERS).map(([id,s])=>`
+    <div class="tab ${id===cur?'active':''}" data-tab="${id}" title="${(s.lastError||'').replace(/"/g,'')}">
+      <span class="d d-${s.dot}"></span>${s.label}
+      ${s.url?`<span class="jump" data-jump="${id}" title="转到面板（新窗口打开）">↗</span>`:''}
+    </div>`).join('') + `<div class="addTab" onclick="openSettings()" title="服务器管理：添加 / 编辑 / 删除">＋</div>`;
+  el.querySelectorAll('[data-tab]').forEach(t=>{
+    t.onclick = ()=>{ cur = t.dataset.tab; resetView(); };
+  });
+  el.querySelectorAll('[data-jump]').forEach(j=>{
+    j.onclick = e=>{
+      e.stopPropagation();
+      const u = (SERVERS[j.dataset.jump]||{}).url;
+      if(u) window.open(u, '_blank');
+    };
+  });
+}
+
+function renderStats(sv){
+  let cli=0, on=0, exh=0, out=0;
+  sv.outbounds.forEach(o=>{ if(o.enabled) out++; });
+  sv.inbounds.forEach(ib=>{
+    cli += ib.clients.length;
+    ib.clients.forEach(c=>{ if(c.status==='online') on++; if(c.status==='exhausted') exh++; });
+  });
+  let sysHtml='';
+  if(sv.sys){
+    const s = sv.sys;
+    if(s.cpu!=null) sysHtml += `<div class="stat">CPU<b class="v-dark">${s.cpu}%</b></div>`;
+    if(s.mem!=null) sysHtml += `<div class="stat">内存<b class="v-dark">${s.mem}%</b></div>`;
+    if(s.uptime) sysHtml += `<div class="stat">已运行<b class="v-dark">${fmtDur(s.uptime)}</b></div>`;
+  }
+  document.getElementById('stats').innerHTML = `
+    <div class="stat">入站<b class="v-blue">${sv.inbounds.length}</b></div>
+    <div class="stat">出站<b class="v-teal">${out}</b></div>
+    <div class="stat">客户端<b class="v-dark">${cli}</b></div>
+    <div class="stat">在线<b class="v-green">${on}</b></div>
+    <div class="stat">耗尽<b class="v-red">${exh}</b></div>` + sysHtml;
+  document.getElementById('zoomHint').textContent =
+    `共 ${sv.inbounds.length} 个入站 · 更新于 ${sv.updated?new Date(sv.updated).toLocaleTimeString():'—'} · 滚轮缩放 · 拖拽平移`;
+}
+
+/* ==================== 交互 ==================== */
+function bindEvents(sv){
+  const hoverG = document.getElementById('lyHover');
+
+  svg.querySelectorAll('[data-ib]').forEach(g=>{
+    const ib = sv.inbounds.find(x=>x.id===g.dataset.ib);
+    if(!ib) return;
+    const core = g.querySelector('.core');
+    g.addEventListener('mouseenter', e=>{
+      core.classList.add('hl');
+      // 悬停入站 → 虚线连所有客户端小行星
+      ib._chips.forEach(p=>{ hoverG.innerHTML += dashed(ib.x, ib.y, p.x, p.y); });
+      showTip(e, `端口 ${ib.port} · ${ib.expanded ? `关联客户端 · ${ib.clients.length}` : `点击展开 · ${ib.clients.length} 个客户端`}`);
+    });
+    g.addEventListener('mousemove', e=>moveTip(e));
+    g.addEventListener('mouseleave', ()=>{ core.classList.remove('hl'); hoverG.innerHTML=''; hideTip(); });
+  });
+
+  svg.querySelectorAll('[data-chip]').forEach(f=>{
+    const [ibId, idx] = f.dataset.chip.split('|');
+    const ib = sv.inbounds.find(x=>x.id===ibId);
+    if(!ib) return;
+    const c = ib.clients[+idx];
+    const p = ib._chips[+idx];
+    f.addEventListener('mouseenter', e=>{
+      // 悬停客户端 → 虚线连所属入站
+      hoverG.innerHTML = dashed(p.x, p.y, ib.x, ib.y);
+      const core = svg.querySelector(`[data-ib="${ib.id}"] .core`);
+      if(core) core.classList.add('hl');
+      showTip(e, `所属入站：${ib.name}`);
+    });
+    f.addEventListener('mousemove', e=>moveTip(e));
+    f.addEventListener('mouseleave', ()=>{
+      hoverG.innerHTML='';
+      const core = svg.querySelector(`[data-ib="${ib.id}"] .core`);
+      if(core) core.classList.remove('hl');
+      hideTip();
+    });
+  });
+}
+
+function dashed(x1,y1,x2,y2){
+  const mx=(x1+x2)/2, my=(y1+y2)/2 - 24;
+  return `<path class="hoverline" d="M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}"/>
+    <circle class="pdot" cx="${x2}" cy="${y2}" r="3"/>`;
+}
+
+function showTip(e, text){ tooltip.textContent=text; tooltip.style.display='block'; moveTip(e); }
+function moveTip(e){ tooltip.style.left=(e.clientX+14)+'px'; tooltip.style.top=(e.clientY+14)+'px'; }
+function hideTip(){ tooltip.style.display='none'; }
+
+/* ==================== 缩放 / 平移 ==================== */
+function applyView(){ world.setAttribute('transform', `translate(${view.x},${view.y}) scale(${view.s})`); }
+function fitView(){
+  const r = svg.getBoundingClientRect();
+  const bw = worldBounds.x1 - worldBounds.x0, bh = worldBounds.y1 - worldBounds.y0;
+  view.s = Math.min(r.width/bw, r.height/bh) * 0.96;
+  view.x = r.width/2 - (worldBounds.x0 + worldBounds.x1)/2 * view.s;
+  view.y = r.height/2 - (worldBounds.y0 + worldBounds.y1)/2 * view.s;
+  applyView();
+}
+function resetView(){ render(); fitView(); }
+// 清空当前服务器保存的手动位置（含尾巴 _moved 标记），回到自动星系布局
+function resetLayout(){
+  POS[cur] = {}; savePos();
+  const sv = SERVERS[cur];
+  if(sv){
+    sv.outbounds.forEach(o=>{ o._moved = false; });
+    layoutServer(sv);
+  }
+  render(); fitView();
+}
+
+svg.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  const mx = e.clientX-r.left, my = e.clientY-r.top;
+  const k = e.deltaY < 0 ? 1.12 : 1/1.12;
+  const ns = Math.min(3.5, Math.max(0.04, view.s*k));
+  view.x = mx - (mx-view.x)/view.s*ns;
+  view.y = my - (my-view.y)/view.s*ns;
+  view.s = ns; applyView();
+}, {passive:false});
+
+/* ==================== 拖放 / 平移 ==================== */
+let dragging=false, dragMoved=false, lx=0, ly=0;
+let dragEl = null;   // 元素拖拽状态 {kind:'ib'|'chip'|'ob', ...}
+
+function screenToWorld(cx, cy){
+  const r = svg.getBoundingClientRect();
+  return { x:(cx - r.left - view.x)/view.s, y:(cy - r.top - view.y)/view.s };
+}
+
+// 只重建连线层（拖动时保持高性能，节点/chip 事件监听不受影响）
+function refreshMain(){
+  const sv = SERVERS[cur], om = obMap(sv);
+  computeBends(sv);
+  let main = '';
+  sv.inbounds.forEach(ib=>{
+    if(ib._li<0 || !ib.enabled) return;
+    const ob = om[ib.ob];
+    if(!ob || !ob.enabled) return;
+    const d = linePath(ib, ob);
+    main += `<path class="mainline glow" d="${d}"/><path class="mainline" d="${d}"/><path class="flow" d="${d}"/>`;
+  });
+  document.getElementById('lyMain').innerHTML = main;
+}
+
+// 拖拽结束后把位置写进 POS（localStorage 持久化）
+function saveDragPos(d){
+  const P = POS[cur] = POS[cur] || {};
+  if(d.kind==='ib'){
+    P[d.ib.id] = { x: d.ib.x, y: d.ib.y };
+  } else if(d.kind==='chip'){
+    const ib = d.ib, i = d.idx, n = ib.clients.length;
+    const ang = (-90 + (i+0.5)*360/n) * Math.PI/180;
+    const bx = ib.x + Math.cos(ang)*115, by = ib.y + Math.sin(ang)*115;
+    P[ib.id+'#'+i] = { dx: d.p.x - bx, dy: d.p.y - by };
+  } else {
+    P[d.ob.id] = { x: d.ob.x, y: d.ob.y, moved: true };
+  }
+  savePos();
+}
+
+svg.addEventListener('pointerdown', e=>{
+  // 备注气泡：不进入拖拽/平移逻辑，让 click 正常触发编辑
+  if(e.target.closest && e.target.closest('[data-obnote]')) return;
+  const el = e.target.closest ? e.target.closest('[data-ib],[data-chip],[data-ob]') : null;
+  dragMoved = false;
+  if(el && SERVERS[cur]){
+    const w = screenToWorld(e.clientX, e.clientY);
+    if(el.dataset.ib){
+      const ib = SERVERS[cur].inbounds.find(x=>x.id===el.dataset.ib);
+      dragEl = { kind:'ib', ib, dx: ib.x - w.x, dy: ib.y - w.y };
+    } else if(el.dataset.chip){
+      const [ibId, idx] = el.dataset.chip.split('|');
+      const ib = SERVERS[cur].inbounds.find(x=>x.id===ibId);
+      const p = ib._chips[+idx];
+      dragEl = { kind:'chip', ib, idx:+idx, p, dx: p.x - w.x, dy: p.y - w.y, fo: el };
+    } else {
+      const ob = SERVERS[cur].outbounds.find(o=>o.id===el.dataset.ob);
+      dragEl = { kind:'ob', ob, dx: ob.x - w.x, dy: ob.y - w.y, fo: el };
+    }
+    document.getElementById('lyHover').innerHTML='';
+    hideTip();
+    svg.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    return;
+  }
+  // 空白处 → 平移画布
+  dragging=true; lx=e.clientX; ly=e.clientY;
+  svg.classList.add('panning');
+  svg.setPointerCapture(e.pointerId);
+});
+
+svg.addEventListener('pointermove', e=>{
+  if(dragEl){
+    const w = screenToWorld(e.clientX, e.clientY);
+    const nx = w.x + dragEl.dx, ny = w.y + dragEl.dy;
+    if(dragEl.kind==='ib'){
+      // 拖入站：客户端行星整组跟随
+      const ib = dragEl.ib;
+      const ddx = nx - ib.x, ddy = ny - ib.y;
+      ib.x = nx; ib.y = ny;
+      const g = svg.querySelector(`[data-ib="${ib.id}"]`);
+      if(g) g.setAttribute('transform', `translate(${nx},${ny})`);
+      ib._chips.forEach((p,i)=>{
+        p.x += ddx; p.y += ddy;
+        const fo = svg.querySelector(`[data-chip="${ib.id}|${i}"]`);
+        if(fo){ fo.setAttribute('x', p.x-75); fo.setAttribute('y', p.y-23); }
+      });
+      refreshMain();
+    } else if(dragEl.kind==='chip'){
+      const p = dragEl.p;
+      p.x = nx; p.y = ny;
+      dragEl.fo.setAttribute('x', p.x-75);
+      dragEl.fo.setAttribute('y', p.y-23);
+      document.getElementById('lyHover').innerHTML='';
+    } else {
+      dragEl.ob.x = nx; dragEl.ob.y = ny;
+      dragEl.fo.setAttribute('x', nx);
+      dragEl.fo.setAttribute('y', ny);
+      const nf = svg.querySelector(`[data-obnote="${dragEl.ob.id}"]`);
+      if(nf){ nf.setAttribute('x', nx-10); nf.setAttribute('y', ny-46); }   // 备注气泡跟随
+      refreshMain();
+    }
+    dragMoved = true;
+    return;
+  }
+  if(!dragging) return;
+  const dx=e.clientX-lx, dy=e.clientY-ly;
+  if(Math.abs(dx)+Math.abs(dy)>4) dragMoved=true;
+  view.x+=dx; view.y+=dy; lx=e.clientX; ly=e.clientY; applyView();
+});
+
+svg.addEventListener('pointerup', e=>{
+  if(dragEl){
+    const wasClick = !dragMoved;
+    const d = dragEl; dragEl = null;
+    if(wasClick && d.kind==='ib'){
+      // 点击 = 展开/收起
+      d.ib.expanded = !d.ib.expanded;
+      if(d.ib.expanded) EXPSET.add(d.ib.id); else EXPSET.delete(d.ib.id);
+      render();
+    } else if(dragMoved){
+      saveDragPos(d);
+      // 拖拽期间若到达了新数据，现在应用
+      if(pendingApply){ const p = pendingApply; pendingApply = null; applyData(p); }
+    }
+    return;
+  }
+  dragging=false;
+  svg.classList.remove('panning');
+});
+
+window.addEventListener('resize', fitView);
+
+/* ==================== 服务器管理（Web 弹窗）==================== */
+function authHeaders(){ const h={}; if(KEY) h['X-Dash-Key']=KEY; return h; }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+let SETTINGS = null;   // /api/settings 缓存（含 hasPassword/hasToken）
+
+async function openSettings(){
+  try{
+    const r = await fetch('/api/settings', { headers: authHeaders() });
+    if(r.status===401){ showGate(); return; }
+    SETTINGS = await r.json();
+  }catch(e){ alert('读取配置失败：'+e.message); return; }
+  renderSettings();
+  document.getElementById('modalMask').style.display='flex';
+}
+function closeSettings(){
+  document.getElementById('modalMask').style.display='none';
+  clearForm();
+}
+function renderSettings(){
+  const el = document.getElementById('srvList');
+  el.innerHTML = (SETTINGS.servers||[]).map(s=>{
+    const live = SERVERS[s.id];
+    const dot = live ? live.dot : 'err';
+    const dotTitle = live && live.lastError ? live.lastError : (live ? '已连接' : '尚未连通');
+    const auth = s.hasToken ? 'Token' : (s.hasPassword ? '账密' : '未配置认证');
+    return `<div class="srv-row">
+      <span class="d d-${dot}" title="${esc(dotTitle)}"></span>
+      <div class="info">
+        <div class="nm">${esc(s.name)}${s.enabled?'':' <span style="color:#F59E0B;font-size:11px;font-weight:400">已停用</span>'}
+          <span style="color:#B0B5C1;font-size:11px;font-weight:400">${auth}</span></div>
+        <div class="url">${esc(s.url)}</div>
+      </div>
+      <button class="sbtn" onclick="editServer('${esc(s.id)}')">编辑</button>
+      <button class="sbtn dgr" onclick="delServer('${esc(s.id)}')">删除</button>
+    </div>`;
+  }).join('') || '<div style="color:#9BA1AF;font-size:12px;padding:6px 0 10px">还没有服务器，在下方填写并「保存服务器」</div>';
+  document.getElementById('demoToggle').checked = !!SETTINGS.demo;
+  const hasKey = !!SETTINGS.hasKey;
+  document.getElementById('btnClearKey').style.display = hasKey ? '' : 'none';
+  document.getElementById('f_dashkey').placeholder = hasKey ? '已设置密码（输入可修改）' : '设置看板访问密码';
+}
+
+function clearForm(){
+  ['f_id','f_name','f_url','f_user','f_pass','f_token'].forEach(id=>{ document.getElementById(id).value=''; });
+  document.getElementById('f_insecure').checked = true;
+  document.getElementById('f_enabled').checked = true;
+  document.getElementById('testMsg').textContent='';
+  document.getElementById('testMsg').className='testMsg';
+}
+function editServer(id){
+  const s = (SETTINGS.servers||[]).find(x=>x.id===id);
+  if(!s) return;
+  document.getElementById('f_id').value = s.id;
+  document.getElementById('f_name').value = s.name||'';
+  document.getElementById('f_url').value = s.url||'';
+  document.getElementById('f_user').value = s.username||'';
+  document.getElementById('f_pass').value = '';
+  document.getElementById('f_token').value = '';
+  document.getElementById('f_insecure').checked = !!s.insecure;
+  document.getElementById('f_enabled').checked = s.enabled!==false;
+  document.getElementById('f_pass_hint').textContent = s.hasPassword ? '已保存，留空 = 保持不变' : '尚未设置';
+  document.getElementById('f_name').focus();
+}
+function formServer(){
+  const id = document.getElementById('f_id').value.trim();
+  const name = document.getElementById('f_name').value.trim();
+  const url = document.getElementById('f_url').value.trim();
+  const msg = document.getElementById('testMsg');
+  if(!name || !url){ msg.textContent='名称和面板地址必填'; msg.className='testMsg err'; return null; }
+  return {
+    id: id || ('srv'+Math.random().toString(36).slice(2,7)),
+    name, url,
+    username: document.getElementById('f_user').value.trim(),
+    password: document.getElementById('f_pass').value,
+    token: document.getElementById('f_token').value.trim(),
+    insecure: document.getElementById('f_insecure').checked,
+    enabled: document.getElementById('f_enabled').checked
+  };
+}
+async function postSettings(){
+  const r = await fetch('/api/settings', {
+    method:'POST', headers:{ 'Content-Type':'application/json', ...authHeaders() },
+    body: JSON.stringify({ servers: SETTINGS.servers, demo: SETTINGS.demo })
+  });
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+async function upsertServer(){
+  const s = formServer(); if(!s) return;
+  const i = SETTINGS.servers.findIndex(x=>x.id===s.id);
+  if(i>=0) SETTINGS.servers[i]=s; else SETTINGS.servers.push(s);
+  try{
+    const r = await postSettings();
+    if(!r.ok) throw new Error(r.error||'保存失败');
+    document.getElementById('f_id').value = s.id;   // 新增后记住 id，密码留空逻辑才成立
+    document.getElementById('f_pass').value='';
+    document.getElementById('testMsg').textContent='✓ 已保存并生效';
+    document.getElementById('testMsg').className='testMsg ok';
+    renderSettings();
+    loadData();
+  }catch(e){
+    document.getElementById('testMsg').textContent='保存失败：'+e.message;
+    document.getElementById('testMsg').className='testMsg err';
+  }
+}
+async function delServer(id){
+  const s = (SETTINGS.servers||[]).find(x=>x.id===id);
+  if(!confirm(`确定删除「${s?s.name:id}」？（仅从看板移除，不影响面板本身）`)) return;
+  SETTINGS.servers = SETTINGS.servers.filter(x=>x.id!==id);
+  try{
+    await postSettings();
+    renderSettings();
+    if(cur===id){ cur=null; }
+    loadData();
+  }catch(e){ alert('删除失败：'+e.message); }
+}
+async function testConn(){
+  const s = formServer(); if(!s) return;
+  const msg = document.getElementById('testMsg');
+  msg.textContent='测试中…'; msg.className='testMsg';
+  try{
+    const r = await fetch('/api/test', {
+      method:'POST', headers:{ 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ server: s })
+    });
+    const j = await r.json();
+    if(j.ok){ msg.textContent=`✓ 连接成功，发现 ${j.inbounds} 个入站`; msg.className='testMsg ok'; }
+    else { msg.textContent='✗ '+j.error; msg.className='testMsg err'; }
+  }catch(e){ msg.textContent='✗ '+e.message; msg.className='testMsg err'; }
+}
+async function saveDemo(v){
+  SETTINGS.demo = v;
+  try{ await postSettings(); loadData(); }
+  catch(e){ alert('切换失败：'+e.message); }
+}
+
+/* ==================== 一键展开 / 收起 ==================== */
+function toggleExpandAll(){
+  const sv = SERVERS[cur]; if(!sv || !sv.inbounds.length) return;
+  const all = sv.inbounds.every(ib=>ib.expanded);
+  sv.inbounds.forEach(ib=>{
+    ib.expanded = !all;
+    if(!all) EXPSET.add(ib.id); else EXPSET.delete(ib.id);
+  });
+  render();
+}
+
+/* ==================== 访问密码门禁 ==================== */
+function showGate(msg){
+  const g = document.getElementById('gate');
+  g.style.display = 'flex';
+  document.getElementById('gateErr').textContent = msg || '';
+  setTimeout(()=>{ const k = document.getElementById('gateKey'); k.focus(); }, 60);
+}
+async function gateSubmit(){
+  const k = document.getElementById('gateKey').value;
+  if(!k) return;
+  KEY = k; localStorage.setItem('xuidash.key', k);
+  try{
+    const r = await fetch('/api/data', { headers: { 'X-Dash-Key': KEY } });
+    if(r.status === 401){ document.getElementById('gateErr').textContent = '密码错误，请重试'; return; }
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('gateKey').value = '';
+    document.getElementById('gateErr').textContent = '';
+    loadData();
+  }catch(e){ document.getElementById('gateErr').textContent = '连接失败：' + e.message; }
+}
+
+/* ==================== 看板访问密码（管理弹窗）==================== */
+async function saveDashKey(){
+  const v = document.getElementById('f_dashkey').value.trim();
+  if(!v){ alert('请输入要设置的访问密码'); return; }
+  try{
+    const r = await fetch('/api/settings', {
+      method:'POST', headers:{ 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ dashboardKey: v })
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(SETTINGS) SETTINGS.hasKey = true;
+    KEY = v; localStorage.setItem('xuidash.key', v);
+    document.getElementById('f_dashkey').value = '';
+    renderSettings();
+    alert('✓ 访问密码已生效（本浏览器已自动记住）');
+  }catch(e){ alert('保存失败：'+e.message); }
+}
+async function clearDashKey(){
+  if(!confirm('确定清除看板访问密码？清除后任何人都能打开看板。')) return;
+  try{
+    const r = await fetch('/api/settings', {
+      method:'POST', headers:{ 'Content-Type':'application/json', ...authHeaders() },
+      body: JSON.stringify({ clearKey: true })
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(SETTINGS) SETTINGS.hasKey = false;
+    renderSettings();
+  }catch(e){ alert('清除失败：'+e.message); }
+}
+
+/* ==================== 启动 ==================== */
+document.getElementById('gateBtn').onclick = gateSubmit;
+document.getElementById('gateKey').addEventListener('keydown', e=>{ if(e.key==='Enter') gateSubmit(); });
+loadData();
+setInterval(loadData, 15000);   // 每 15 秒自动刷新
+</script>
+</body>
+</html>
