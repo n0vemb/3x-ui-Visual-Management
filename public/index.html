@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3X-UI 多服务器看板 · 实时关系可视化</title>
+<title>3x-ui 管理器 · 实时关系可视化</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body { height:100%; overflow:hidden; }
@@ -139,7 +139,7 @@
 
 <header>
   <div>
-    <h1>面板看板</h1>
+    <h1>3x-ui 管理器</h1>
     <div class="sub">多服务器 3X-UI 面板 · 入站 → 出站 关系总览 · 数据自动刷新</div>
   </div>
   <div class="stats" id="stats"></div>
@@ -149,7 +149,7 @@
 
 <div class="canvas-wrap">
   <svg id="view"><g id="world"></g></svg>
-  <div id="boot">正在连接看板后端…（请确认 server.js 正在运行）</div>
+  <div id="boot">正在连接后端服务…（请确认 server.js 正在运行）</div>
   <div class="legend">
     <div class="row"><span class="lg-dot" style="background:#00B473"></span>在线<span class="lg-dot" style="background:#C4C9D4;margin-left:10px"></span>离线<span class="lg-dot" style="background:#E5484D;margin-left:10px"></span>流量耗尽/已到期</div>
     <div class="row"><span class="tgl off" style="width:18px;height:10px"></span>开关关闭 = 已停用</div>
@@ -170,10 +170,10 @@
 <!-- 访问密码门禁 -->
 <div id="gate">
   <div class="gcard">
-    <h2>🔒 面板看板</h2>
-    <div class="gsub">该看板已开启访问控制，请输入密码</div>
+    <h2>🔒 3x-ui 管理器</h2>
+    <div class="gsub">该管理器已开启访问控制，请输入密码</div>
     <input id="gateKey" type="password" placeholder="访问密码" autocomplete="off">
-    <button id="gateBtn">进入看板</button>
+    <button id="gateBtn">进入管理器</button>
     <div class="gerr" id="gateErr"></div>
   </div>
 </div>
@@ -202,7 +202,7 @@
     <div class="foot">
       <label class="chk"><input type="checkbox" id="demoToggle" onchange="saveDemo(this.checked)"> 演示模式（内置示例数据，不连真实面板）</label>
       <span style="flex:1"></span>
-      <input id="f_dashkey" type="password" placeholder="看板访问密码" style="width:150px;border:1px solid #E4E7EE;border-radius:7px;padding:5px 8px;font-size:12px;outline:none" title="设置后打开看板需输入密码">
+      <input id="f_dashkey" type="password" placeholder="访问密码" style="width:150px;border:1px solid #E4E7EE;border-radius:7px;padding:5px 8px;font-size:12px;outline:none" title="设置后打开管理器需输入密码">
       <button class="sbtn" onclick="saveDashKey()">保存密码</button>
       <button class="sbtn dgr" id="btnClearKey" style="display:none" onclick="clearDashKey()">清除密码</button>
       <button class="sbtn" onclick="closeSettings()">关闭</button>
@@ -888,7 +888,7 @@ function renderSettings(){
   document.getElementById('demoToggle').checked = !!SETTINGS.demo;
   const hasKey = !!SETTINGS.hasKey;
   document.getElementById('btnClearKey').style.display = hasKey ? '' : 'none';
-  document.getElementById('f_dashkey').placeholder = hasKey ? '已设置密码（输入可修改）' : '设置看板访问密码';
+  document.getElementById('f_dashkey').placeholder = hasKey ? '已设置密码（输入可修改）' : '设置访问密码';
 }
 
 function clearForm(){
@@ -956,7 +956,7 @@ async function upsertServer(){
 }
 async function delServer(id){
   const s = (SETTINGS.servers||[]).find(x=>x.id===id);
-  if(!confirm(`确定删除「${s?s.name:id}」？（仅从看板移除，不影响面板本身）`)) return;
+  if(!confirm(`确定删除「${s?s.name:id}」？（仅从管理器移除，不影响面板本身）`)) return;
   SETTINGS.servers = SETTINGS.servers.filter(x=>x.id!==id);
   try{
     await postSettings();
@@ -1035,7 +1035,7 @@ async function saveDashKey(){
   }catch(e){ alert('保存失败：'+e.message); }
 }
 async function clearDashKey(){
-  if(!confirm('确定清除看板访问密码？清除后任何人都能打开看板。')) return;
+  if(!confirm('确定清除访问密码？清除后任何人都能打开管理器。')) return;
   try{
     const r = await fetch('/api/settings', {
       method:'POST', headers:{ 'Content-Type':'application/json', ...authHeaders() },

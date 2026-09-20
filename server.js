@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 3X-UI 面板看板后端（零依赖，Node >= 18）
+ * 3x-ui 管理器后端（零依赖，Node >= 18）
  *
  * 职责：
  *  1. 轮询各服务器上的 3x-ui 面板 API（登录会话 / API Token 二选一）
@@ -567,7 +567,7 @@ http.createServer(async (req2, res) => {
           });
       }
       if (typeof body.demo === 'boolean') cfg.demo = body.demo;
-      // 看板访问密码：Web 弹窗直接设置/清除
+      // 管理器访问密码：Web 弹窗直接设置/清除
       if (typeof body.dashboardKey === 'string' && body.dashboardKey.trim()) cfg.dashboardKey = body.dashboardKey.trim();
       if (body.clearKey === true) delete cfg.dashboardKey;
       writeJSON(CFG_FILE, cfg);
@@ -613,7 +613,7 @@ http.createServer(async (req2, res) => {
     res.end(buf);
   });
 }).listen(PORT, () => {
-  console.log(`面板看板已启动: http://localhost:${PORT}${cfg.demo ? '（演示模式）' : ''}`);
+  console.log(`3x-ui 管理器已启动: http://localhost:${PORT}${cfg.demo ? '（演示模式）' : ''}`);
 });
 
 // 首次立即拉取，之后按 pollInterval 轮询
