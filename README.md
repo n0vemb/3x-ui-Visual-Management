@@ -49,8 +49,8 @@ node server.js
   "servers": [
     {
       "id": "us",
-      "name": "美国 · 45.119.4.207",
-      "url": "https://45.119.4.207:54321",   ← 面板完整地址（含端口/路径）
+      "name": "美国 · 12.119.4.207",
+      "url": "https://12.119.4.207:54321",   ← 面板完整地址（含端口/路径）
       "username": "admin",
       "password": "xxx",
       "token": "",          ← 可选：API Token，填了就优先用 token，账密可留空

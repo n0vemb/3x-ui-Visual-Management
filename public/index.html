@@ -133,6 +133,43 @@
   .obnote:hover { border-color:#D9B94A; }
   .obnote .nadd { color:#C9B77A; }
   .obnote .ninput { width:100%; border:none; outline:none; background:transparent; font-size:11px; font-family:inherit; color:#6B5410; padding:0; }
+  /* ===== 卡片操作按钮 ===== */
+  .obcard .addIn { margin-top:5px; text-align:center; font-size:10.5px; color:#4262FF; background:#F0F3FF; border-radius:6px; padding:3px 0; cursor:pointer; }
+  .obcard .addIn:hover { background:#E4E9F8; }
+  .obcard.disabled .addIn { color:#B0B5C1; background:#F3F4F7; }
+  .addChipBtn { border:1px solid #4262FF; background:#fff; color:#4262FF; border-radius:99px; padding:3px 10px; font-size:11px; cursor:pointer; font-family:inherit; box-shadow:0 3px 8px rgba(66,98,255,.15); white-space:nowrap; }
+  .addChipBtn:hover { background:#4262FF; color:#fff; }
+  .chip .acts { display:flex; gap:4px; margin-top:5px; }
+  .chip .mini { flex:1; border:1px solid #E4E7EE; background:#FAFBFD; border-radius:6px; padding:2px 0; font-size:10px; color:#555A6A; cursor:pointer; text-align:center; font-family:inherit; }
+  .chip .mini:hover { border-color:#4262FF; color:#4262FF; background:#F0F3FF; }
+  .chip.dis .mini { color:#B0B5C1; }
+  /* ===== 入站/客户端弹窗（对齐 3x-ui 表单结构）===== */
+  .msec { border-top:1px dashed #E4E7EE; margin-top:14px; padding-top:10px; }
+  .msec h3 { font-size:12.5px; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+  .msec h3 .tag3 { font-size:10px; font-weight:400; color:#B0B5C1; }
+  .mgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; }
+  .mgrid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px 12px; }
+  .fld select { border:1px solid #E4E7EE; border-radius:7px; padding:7px 8px; font-size:13px; font-family:inherit; outline:none; background:#fff; }
+  .fld select:focus { border-color:#4262FF; }
+  .fld .row2 { display:flex; gap:6px; }
+  .fld .row2 input { flex:1; min-width:0; }
+  .fld .rbtn { flex:none; border:1px solid #E4E7EE; background:#fff; border-radius:7px; padding:0 9px; font-size:11px; color:#555A6A; cursor:pointer; }
+  .fld .rbtn:hover { background:#EDEFF4; }
+  .mnote { background:#F0F3FF; border:1px solid #D9E1F8; border-radius:8px; padding:8px 11px; font-size:11.5px; color:#3D5BD9; margin-bottom:12px; line-height:1.5; }
+  .mnote.warnc { background:#FFF9E6; border-color:#F0DFA3; color:#8A6D1A; }
+  .modal .foot2 { border-top:1px dashed #E4E7EE; margin-top:14px; padding-top:12px; display:flex; gap:8px; align-items:center; }
+  .modal .foot2 .grow { flex:1; }
+  .optMsg { font-size:12px; min-height:18px; }
+  .optMsg.ok { color:#00B473; } .optMsg.err { color:#E5484D; }
+  .label-chk { display:flex; gap:6px; align-items:center; font-size:12px; color:#555A6A; cursor:pointer; }
+  .hintln { font-size:10.5px; color:#B0B5C1; line-height:1.4; }
+  /* ===== 二维码弹窗 ===== */
+  .qwrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .qwrap canvas { border:1px solid #E4E7EE; border-radius:10px; padding:10px; background:#fff; }
+  .qwrap .lnk { width:100%; font-size:11px; color:#555A6A; word-break:break-all; background:#F5F6FA; border-radius:8px; padding:8px 10px; max-height:80px; overflow:auto; font-family:ui-monospace,Menlo,monospace; }
+  /* ===== 全局提示 toast ===== */
+  #toast { position:fixed; left:50%; bottom:44px; transform:translateX(-50%); background:#1C1C1E; color:#fff; font-size:12px; padding:9px 18px; border-radius:99px; z-index:300; display:none; box-shadow:0 8px 24px rgba(0,0,0,.25); max-width:72vw; line-height:1.5; }
+  #toast.ok { background:#0E8A5F; } #toast.err { background:#C63A3F; }
 </style>
 </head>
 <body>
@@ -166,6 +203,7 @@
 </div>
 
 <div id="tooltip"></div>
+<div id="toast"></div>
 
 <!-- 访问密码门禁 -->
 <div id="gate">
@@ -206,6 +244,131 @@
       <button class="sbtn" onclick="saveDashKey()">保存密码</button>
       <button class="sbtn dgr" id="btnClearKey" style="display:none" onclick="clearDashKey()">清除密码</button>
       <button class="sbtn" onclick="closeSettings()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新建入站弹窗（对齐 3x-ui 新建入站表单） -->
+<div class="modal-mask" id="ibMask" onclick="if(event.target===this)closeIb()">
+  <div class="modal" style="width:720px">
+    <h2>新建入站 <span style="font-size:11px;color:#B0B5C1;font-weight:400;margin-left:8px" id="ibCtx"></span></h2>
+    <div class="mnote warnc" style="display:flex;gap:8px;align-items:flex-start">
+      <input type="checkbox" id="ibRoute" checked style="margin-top:2px">
+      <label for="ibRoute" style="cursor:pointer">创建后同时写入路由规则（<span id="ibRouteTxt"></span>）并重启 Xray 生效。<b>写回前自动备份原配置，失败自动回滚</b>；重启会导致该服务器连接瞬断几秒。</label>
+    </div>
+    <div class="mgrid">
+      <div class="fld"><label>备注 *（入站名）</label><input id="ibRemark" placeholder="如 204.0.16.207"></div>
+      <div class="fld"><label class="chk" style="margin-top:18px"><input type="checkbox" id="ibEnable" checked> 启用此入站</label></div>
+      <div class="fld"><label>端口 *</label><div class="row2"><input id="ibPort" type="text" inputmode="numeric"><button class="rbtn" onclick="ibPortAuto()" title="随机避开已用端口">随机</button></div></div>
+      <div class="fld"><label>监听 IP（留空 = 全部）</label><input id="ibListen" placeholder="0.0.0.0"></div>
+      <div class="fld"><label>总流量 GB（0 = 不限）</label><input id="ibTotal" type="text" inputmode="numeric" value="0"></div>
+      <div class="fld"><label>到期天数（0 = 永不）</label><input id="ibExpiry" type="text" inputmode="numeric" value="0"></div>
+    </div>
+
+    <div class="msec">
+      <h3>协议 <span class="tag3">客户端与协议设置（与 3x-ui 面板一致）</span></h3>
+      <div class="mgrid">
+        <div class="fld"><label>协议</label>
+          <select id="ibProto" onchange="ibProtoChange()">
+            <option value="vless">VLESS</option><option value="vmess">VMess</option>
+            <option value="trojan">Trojan</option><option value="shadowsocks">Shadowsocks</option>
+          </select></div>
+        <div class="fld" id="ibFlowF" style="display:none"><label>Flow（Reality 下建议 xtls-rprx-vision）</label>
+          <select id="ibFlow"><option value="">none</option><option value="xtls-rprx-vision">xtls-rprx-vision</option></select></div>
+        <div class="fld"><label>客户端名称 / Email *</label><input id="ibEmail" placeholder="客户端标识"></div>
+        <div class="fld" id="ibIdF"><label id="ibIdLabel">UUID</label>
+          <div class="row2"><input id="ibIdVal"><button class="rbtn" onclick="ibIdGen()">换一个</button></div><div class="hintln">留空将自动生成</div></div>
+        <div class="fld" id="ibSsMethodF" style="display:none"><label>加密方法</label>
+          <select id="ibSsMethod">
+            <option value="chacha20-poly1305">chacha20-poly1305</option>
+            <option value="aes-256-gcm">aes-256-gcm</option>
+            <option value="aes-128-gcm">aes-128-gcm</option><option value="2022-blake3-aes-256-gcm">2022-blake3-aes-256-gcm</option>
+          </select></div>
+        <div class="fld"><label>IP 数限制（0 = 不限）</label><input id="ibLimitIp" type="text" inputmode="numeric" value="0"></div>
+      </div>
+    </div>
+
+    <div class="msec">
+      <h3>传输层 <span class="tag3">Stream Settings</span></h3>
+      <div class="mgrid3">
+        <div class="fld"><label>传输 network</label>
+          <select id="ibNet" onchange="ibNetChange()">
+            <option value="tcp">TCP</option><option value="ws">WebSocket</option>
+            <option value="grpc">gRPC</option><option value="http">HTTP/2</option>
+          </select></div>
+        <div class="fld" id="ibPathF" style="display:none"><label id="ibPathLabel">Path</label><input id="ibPath"></div>
+        <div class="fld"><label>安全性 security</label>
+          <select id="ibSec" onchange="ibSecChange()">
+            <option value="none">none</option><option value="tls">TLS</option><option value="reality">Reality</option>
+          </select></div>
+      </div>
+      <div id="ibTlsBox" style="display:none">
+        <div class="mgrid" style="margin-top:8px">
+          <div class="fld"><label>SNI / ServerName</label><input id="ibTlsSni" placeholder="如 www.example.com"></div>
+          <div class="fld"><label>证书文件路径（cert / key，面板服务器上的绝对路径）</label><div class="row2"><input id="ibTlsCert" placeholder="证书 pem"><input id="ibTlsKey" placeholder="私钥 pem"></div><div class="hintln">TLS 必须提供证书；不填则由面板默认处理</div></div>
+        </div>
+      </div>
+      <div id="ibRealBox" style="display:none">
+        <div class="mgrid" style="margin-top:8px">
+          <div class="fld"><label>Dest（目标站点）</label><input id="ibRDest" value="www.microsoft.com:443"></div>
+          <div class="fld"><label>ServerNames（逗号分隔）</label><input id="ibRSni" placeholder="www.microsoft.com"></div>
+          <div class="fld"><label>PrivateKey</label><div class="row2"><input id="ibRPriv"><button class="rbtn" onclick="ibRGen()">重新生成</button></div></div>
+          <div class="fld"><label>PublicKey（分享链接用，自动生成）</label><input id="ibRPub" readonly></div>
+          <div class="fld"><label>ShortIds（逗号分隔）</label><input id="ibRSid"></div>
+          <div class="fld"><label>指纹 fingerprint</label>
+            <select id="ibRFp"><option>chrome</option><option>firefox</option><option>safari</option><option>edge</option><option>random</option></select></div>
+        </div>
+      </div>
+      <div style="margin-top:10px"><label class="chk"><input type="checkbox" id="ibSniff" checked> 流量嗅探 Sniffing（http / tls / quic）</label></div>
+    </div>
+
+    <div class="foot2">
+      <button class="sbtn" onclick="closeIb()">取消</button>
+      <span class="grow"></span>
+      <span class="optMsg" id="ibMsg"></span>
+      <button class="sbtn pri" onclick="submitInbound()">创建入站</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新建客户端弹窗（对齐 3x-ui 客户端表单） -->
+<div class="modal-mask" id="clMask" onclick="if(event.target===this)closeCl()">
+  <div class="modal" style="width:560px">
+    <h2>新建客户端 <span style="font-size:11px;color:#B0B5C1;font-weight:400;margin-left:8px" id="clCtx"></span></h2>
+    <div class="mnote" id="clNote">客户端将追加到入站 settings.clients 并整体写回（与面板数据源一致），自动关联所属入站。</div>
+    <div class="mgrid">
+      <div class="fld"><label>名称 / Email *</label><input id="clEmail" placeholder="客户端标识"></div>
+      <div class="fld" id="clIdF"><label id="clIdLabel">UUID</label>
+        <div class="row2"><input id="clIdVal"><button class="rbtn" onclick="clIdGen()">换一个</button></div><div class="hintln">留空将自动生成</div></div>
+      <div class="fld" id="clFlowF" style="display:none"><label>Flow</label>
+        <select id="clFlow"><option value="">none</option><option value="xtls-rprx-vision">xtls-rprx-vision</option></select></div>
+      <div class="fld"><label>总流量 GB（0 = 不限）</label><input id="clTotal" type="text" inputmode="numeric" value="0"></div>
+      <div class="fld"><label>到期天数（0 = 永不）</label><input id="clExpiry" type="text" inputmode="numeric" value="0"></div>
+      <div class="fld"><label>IP 数限制（0 = 不限）</label><input id="clLimitIp" type="text" inputmode="numeric" value="0"></div>
+      <div class="fld"><label class="chk" style="margin-top:18px"><input type="checkbox" id="clEnable" checked> 启用此客户端</label></div>
+      <div class="fld"><label>TG ID（可选）</label><input id="clTg"></div>
+      <div class="fld"><label>订阅 ID subId（留空自动生成）</label><input id="clSub"></div>
+    </div>
+    <div class="foot2">
+      <button class="sbtn" onclick="closeCl()">取消</button>
+      <span class="grow"></span>
+      <span class="optMsg" id="clMsg"></span>
+      <button class="sbtn pri" onclick="submitClient()">创建客户端</button>
+    </div>
+  </div>
+</div>
+
+<!-- 二维码弹窗 -->
+<div class="modal-mask" id="qrMask" onclick="if(event.target===this)closeQr()">
+  <div class="modal" style="width:340px">
+    <h2 id="qrTitle">订阅二维码</h2>
+    <div class="qwrap">
+      <canvas id="qrCanvas" width="220" height="220"></canvas>
+      <div class="lnk" id="qrLink"></div>
+      <div style="display:flex;gap:8px;width:100%">
+        <button class="sbtn" style="flex:1" onclick="copyQrLink()">复制链接</button>
+        <button class="sbtn" style="flex:1" onclick="closeQr()">关闭</button>
+      </div>
     </div>
   </div>
 </div>
@@ -297,18 +460,26 @@ function applyData(data) {
         else if ((c.total > 0 && used >= c.total) || (c.expiryTime > 0 && c.expiryTime <= Date.now())) status = 'exhausted';
         return {
           name: c.email,
+          email: c.email,
           enabled: c.enable !== false,
           status,
           traffic: fmtBytes(used) + ' / ' + (c.total ? fmtBytes(c.total) : '∞'),
-          days: c.expiryTime ? Math.max(0, Math.ceil((c.expiryTime - Date.now()) / 864e5)) : null
+          days: c.expiryTime ? Math.max(0, Math.ceil((c.expiryTime - Date.now()) / 864e5)) : null,
+          raw: c.raw || {}   // 原始客户端对象（uuid/flow/subId/limitIp/password...）
         };
       });
       return {
         id: 'ib:' + ib.id,
+        rid: ib.id,          // 面板真实入站 id（写操作用）
+        tag: ib.tag || '',
         name: ib.remark || ib.tag || ('入站#' + ib.id),
         port: ib.port,
+        listen: ib.listen || '',
+        protocol: ib.protocol || '',
         enabled: ib.enable !== false,
         ob: obId,
+        settings: ib.settings || null,
+        stream: ib.stream || null,
         clients,
         expanded: EXPSET.has('ib:' + ib.id),
         x: 0, y: 0
@@ -479,11 +650,12 @@ function render(){
     const note = (NOTES[cur]||{})[ob.id] || '';
     obs += `<foreignObject data-obnote="${ob.id}" x="${ob.x-10}" y="${ob.y-46}" width="170" height="40" style="overflow:visible">
       <div class="obnote" xmlns="http://www.w3.org/1999/xhtml" title="点击编辑备注（回车保存）">${note ? esc(note) : '<span class="nadd">＋ 备注</span>'}</div></foreignObject>`;
-    obs += `<foreignObject data-ob="${ob.id}" x="${ob.x}" y="${ob.y}" width="150" height="60" style="overflow:visible">
+    obs += `<foreignObject data-ob="${ob.id}" x="${ob.x}" y="${ob.y}" width="150" height="82" style="overflow:visible">
       <div class="obcard ${ob.enabled?'':'disabled'}" xmlns="http://www.w3.org/1999/xhtml">
         <div class="r1"><span class="flag">${ob.flag}</span><span class="tag">${ob.tag}</span>
           ${ob.enabled?`<span class="chipTag c-teal">${ob.proto}</span>`:`<span class="chipTag c-warn">未启用</span>`}</div>
         <div class="r2">${ob.ip}${ob.traffic?' · '+ob.traffic:''}</div>
+        <div class="addIn" data-addin="${ob.id}" title="在此出站下新建入站（自动写入路由规则）">＋ 入站</div>
       </div></foreignObject>`;
   });
 
@@ -517,18 +689,38 @@ function render(){
     </g>`;
   });
 
-  // 客户端信息卡（仅展开的，替换轨道上的小行星点）
+  // 客户端信息卡（仅展开的，替换轨道上的小行星点）—— 附操作行：开关 / 复制链接 / 二维码
   sv.inbounds.forEach(ib=>{
     if(!ib.expanded) return;
     ib.clients.forEach((c,i)=>{
       const p = ib._chips[i];
       const [dLabel,dCls] = daysInfo(c);
-      chips += `<foreignObject class="chipF" data-chip="${ib.id}|${i}" x="${p.x-75}" y="${p.y-23}" width="150" height="46" style="overflow:visible">
+      chips += `<foreignObject class="chipF" data-chip="${ib.id}|${i}" x="${p.x-75}" y="${p.y-26}" width="150" height="72" style="overflow:visible">
         <div class="chip ${c.enabled?'':'dis'}" xmlns="http://www.w3.org/1999/xhtml">
-          <div class="r1"><span class="dot st-${c.status}"></span><span class="nm">${c.name}</span><span class="tgl ${c.enabled?'on':'off'}"></span></div>
+          <div class="r1"><span class="dot st-${c.status}"></span><span class="nm">${c.name}</span><span class="tgl ${c.enabled?'on':'off'}" data-cact="tgl" data-ib="${ib.id}" data-i="${i}" title="启用 / 停用"></span></div>
           <div class="r2"><span class="tr">${c.traffic}</span><span class="dy ${dCls}">${dLabel}</span></div>
+          <div class="acts">
+            <button class="mini" data-cact="copy" data-ib="${ib.id}" data-i="${i}">复制链接</button>
+            <button class="mini" data-cact="qr" data-ib="${ib.id}" data-i="${i}">二维码</button>
+          </div>
         </div></foreignObject>`;
     });
+  });
+
+  // 展开的入站：「＋ 客户端」按钮——绕星球取 12 个候选位，选离所有客户端卡最远的（避免盖住芯片上的开关/按钮）
+  sv.inbounds.forEach(ib=>{
+    if(!ib.expanded) return;
+    let best = { x: ib.x + 163, y: ib.y - 82 }, bestD = -1;
+    for (let a = 0; a < 12; a++) {
+      const ang = a * 30 * Math.PI / 180;
+      const c = { x: ib.x + Math.cos(ang) * 230, y: ib.y + Math.sin(ang) * 190 };
+      let d = Infinity;
+      ib._chips.forEach(p => { d = Math.min(d, Math.hypot(p.x - c.x, p.y - c.y)); });
+      if (!ib._chips.length) d = 300;
+      if (d > bestD) { bestD = d; best = c; }
+    }
+    chips += `<foreignObject data-addchip="${ib.id}" x="${best.x-40}" y="${best.y-13}" width="80" height="26" style="overflow:visible">
+      <button class="addChipBtn" xmlns="http://www.w3.org/1999/xhtml" title="在该入站下新建客户端">＋ 客户端</button></foreignObject>`;
   });
 
   world.innerHTML = `
@@ -584,7 +776,7 @@ function updateWorldBounds(sv){
   });
   sv.outbounds.forEach(ob=>{
     x0=Math.min(x0,ob.x-20); x1=Math.max(x1,ob.x+170);
-    y0=Math.min(y0,ob.y-64); y1=Math.max(y1,ob.y+80);   // 上方留出备注气泡高度
+    y0=Math.min(y0,ob.y-64); y1=Math.max(y1,ob.y+92);   // 上方留出备注气泡、下方留出＋入站按钮
   });
   worldBounds = { x0:Math.min(x0,0), y0:Math.min(y0,0), x1:Math.max(x1,W), y1:Math.max(y1,H) };
 }
@@ -636,7 +828,8 @@ function renderStats(sv){
 function bindEvents(sv){
   const hoverG = document.getElementById('lyHover');
 
-  svg.querySelectorAll('[data-ib]').forEach(g=>{
+  // 只匹配 SVG 星球组 <g data-ib>；客户端开关 <span data-ib> 不是星球，不能绑 hover
+  svg.querySelectorAll('g[data-ib]').forEach(g=>{
     const ib = sv.inbounds.find(x=>x.id===g.dataset.ib);
     if(!ib) return;
     const core = g.querySelector('.core');
@@ -757,8 +950,8 @@ function saveDragPos(d){
 }
 
 svg.addEventListener('pointerdown', e=>{
-  // 备注气泡：不进入拖拽/平移逻辑，让 click 正常触发编辑
-  if(e.target.closest && e.target.closest('[data-obnote]')) return;
+  // 备注气泡 / 卡片操作按钮：不进入拖拽/平移逻辑，让 click 正常触发
+  if(e.target.closest && e.target.closest('[data-obnote],[data-cact],[data-addin],[data-addchip]')) return;
   const el = e.target.closest ? e.target.closest('[data-ib],[data-chip],[data-ob]') : null;
   dragMoved = false;
   if(el && SERVERS[cur]){
@@ -801,7 +994,7 @@ svg.addEventListener('pointermove', e=>{
       ib._chips.forEach((p,i)=>{
         p.x += ddx; p.y += ddy;
         const fo = svg.querySelector(`[data-chip="${ib.id}|${i}"]`);
-        if(fo){ fo.setAttribute('x', p.x-75); fo.setAttribute('y', p.y-23); }
+        if(fo){ fo.setAttribute('x', p.x-75); fo.setAttribute('y', p.y-26); }
       });
       refreshMain();
     } else if(dragEl.kind==='chip'){
@@ -848,6 +1041,25 @@ svg.addEventListener('pointerup', e=>{
 });
 
 window.addEventListener('resize', fitView);
+
+/* ==================== 卡片操作（点击委托）==================== */
+svg.addEventListener('click', e=>{
+  const t = e.target.closest ? e.target.closest('[data-cact],[data-addin],[data-addchip]') : null;
+  if(!t) return;
+  e.stopPropagation();
+  if(t.dataset.addin) { openIbModal(t.dataset.addin); return; }
+  if(t.dataset.addchip) { openClModal(t.dataset.addchip); return; }
+  const act = t.dataset.cact;
+  if(!act) return;
+  const sv = SERVERS[cur]; if(!sv) return;
+  const ib = sv.inbounds.find(x=>x.id===t.dataset.ib);
+  if(!ib) return;
+  const c = ib.clients[+t.dataset.i];
+  if(!c) return;
+  if(act==='tgl') toggleClient(ib, c);
+  else if(act==='copy') copyLink(ib, c);
+  else if(act==='qr') showQR(ib, c);
+});
 
 /* ==================== 服务器管理（Web 弹窗）==================== */
 function authHeaders(){ const h={}; if(KEY) h['X-Dash-Key']=KEY; return h; }
@@ -1046,6 +1258,366 @@ async function clearDashKey(){
     renderSettings();
   }catch(e){ alert('清除失败：'+e.message); }
 }
+
+/* ==================== 面板写操作：新建入站 / 客户端 / 开关 / 链接 / 二维码 ==================== */
+function showToast(msg, cls){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = cls || '';
+  t.style.display = 'block';
+  clearTimeout(t._h);
+  t._h = setTimeout(()=>{ t.style.display='none'; }, cls==='err' ? 5000 : 2600);
+}
+function uuid(){ return crypto.randomUUID ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)); }
+function randHex(n){ let s=''; while(s.length<n) s += Math.floor(Math.random()*16).toString(16); return s; }
+function apiAct(svId, op, body){
+  return fetch('/api/act/' + svId + '/' + op, {
+    method:'POST', headers:{ 'Content-Type':'application/json', ...authHeaders() },
+    body: JSON.stringify(body || {})
+  }).then(r=>r.json());
+}
+function addrHost(){
+  try { return new URL(SERVERS[cur].url).hostname || location.hostname; } catch(e){ return location.hostname; }
+}
+
+/* ---------- 新建入站 ---------- */
+let ibCtx = null;   // { svId, obId, obTag }
+function openIbModal(obId){
+  const sv = SERVERS[cur]; if(!sv) return;
+  const ob = sv.outbounds.find(o=>o.id===obId);
+  if(!ob) return;
+  ibCtx = { svId: sv.id, obId, obTag: ob.tag };
+  document.getElementById('ibCtx').textContent = `将创建到出站「${ob.tag}」下`;
+  document.getElementById('ibRouteTxt').textContent = `inbound tag → ${ob.tag}`;
+  // 端口自动避开已用
+  ibPortAuto();
+  document.getElementById('ibRemark').value = '';
+  document.getElementById('ibEmail').value = 'client-' + randHex(4);
+  document.getElementById('ibIdVal').value = uuid();
+  ['ibTotal','ibExpiry','ibLimitIp'].forEach(id=>{ document.getElementById(id).value='0'; });
+  document.getElementById('ibListen').value='';
+  document.getElementById('ibEnable').checked = true;
+  document.getElementById('ibProto').value = 'vless';
+  document.getElementById('ibNet').value = 'tcp';
+  document.getElementById('ibSec').value = 'none';
+  document.getElementById('ibSniff').checked = true;
+  ibProtoChange(); ibNetChange(); ibSecChange();
+  document.getElementById('ibMsg').textContent='';
+  document.getElementById('ibMask').style.display='flex';
+  document.getElementById('ibRemark').focus();
+}
+function closeIb(){ document.getElementById('ibMask').style.display='none'; }
+function usedPorts(){
+  const s = new Set();
+  (SERVERS[cur]||{inbounds:[]}).inbounds.forEach(ib=>{ if(ib.port) s.add(+ib.port); });
+  return s;
+}
+function ibPortAuto(){
+  const used = usedPorts();
+  let p = 10000 + Math.floor(Math.random()*50000);
+  while(used.has(p)) p = 10000 + Math.floor(Math.random()*50000);
+  document.getElementById('ibPort').value = p;
+}
+function ibProtoChange(){
+  const proto = document.getElementById('ibProto').value;
+  document.getElementById('ibIdF').style.display = proto==='shadowsocks' ? 'none' : '';
+  document.getElementById('ibIdLabel').textContent = proto==='trojan' ? '密码 Password（Trojan）' : 'UUID';
+  document.getElementById('ibSsMethodF').style.display = proto==='shadowsocks' ? '' : 'none';
+  ibSecChange();
+}
+function ibNetChange(){
+  const net = document.getElementById('ibNet').value;
+  const f = document.getElementById('ibPathF');
+  if(net==='tcp'){ f.style.display='none'; return; }
+  f.style.display='';
+  const inp = document.getElementById('ibPath');
+  if(net==='ws'){ document.getElementById('ibPathLabel').textContent='Path'; if(!inp.value.startsWith('/')) inp.value='/'+randHex(8); }
+  else if(net==='grpc'){ document.getElementById('ibPathLabel').textContent='ServiceName'; inp.value=randHex(8); }
+  else { document.getElementById('ibPathLabel').textContent='Path'; if(!inp.value.startsWith('/')) inp.value='/'; }
+}
+function ibSecChange(){
+  const sec = document.getElementById('ibSec').value;
+  const proto = document.getElementById('ibProto').value;
+  document.getElementById('ibTlsBox').style.display = sec==='tls' ? '' : 'none';
+  document.getElementById('ibRealBox').style.display = sec==='reality' ? '' : 'none';
+  // flow 仅 vless + reality 才有意义（3x-ui 行为）
+  document.getElementById('ibFlowF').style.display = (proto==='vless' && sec==='reality') ? '' : 'none';
+  if(sec==='reality' && !document.getElementById('ibRPriv').value) ibRGen();
+}
+async function ibRGen(){
+  try{
+    const r = await fetch('/api/reality/new', { headers: authHeaders() });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    document.getElementById('ibRPriv').value = j.privateKey;
+    document.getElementById('ibRPub').value = j.publicKey;
+    if(!document.getElementById('ibRSid').value) document.getElementById('ibRSid').value = randHex(8);
+    if(!document.getElementById('ibRSni').value){
+      const d = document.getElementById('ibRDest').value.split(':')[0];
+      if(d) document.getElementById('ibRSni').value = d;
+    }
+  }catch(e){ showToast('Reality 密钥生成失败：'+e.message, 'err'); }
+}
+function ibIdGen(){ document.getElementById('ibIdVal').value = uuid(); }
+
+function buildIbPayload(){
+  const port = +document.getElementById('ibPort').value;
+  const remark = document.getElementById('ibRemark').value.trim();
+  const proto = document.getElementById('ibProto').value;
+  const net = document.getElementById('ibNet').value;
+  const sec = document.getElementById('ibSec').value;
+  if(!remark) return { err:'请填写备注' };
+  if(!port || port<1 || port>65535) return { err:'端口无效' };
+  const totalGB = +document.getElementById('ibTotal').value || 0;
+  const days = +document.getElementById('ibExpiry').value || 0;
+  const email = document.getElementById('ibEmail').value.trim();
+  if(!email) return { err:'请填写客户端名称/Email' };
+  const GB = 1024**3;
+  let id = document.getElementById('ibIdVal').value.trim() || uuid();
+  const flow = (proto==='vless' && sec==='reality') ? document.getElementById('ibFlow').value : '';
+  const client = { id, flow, email, limitIp:+document.getElementById('ibLimitIp').value||0,
+    totalGB: totalGB*GB, expiryTime: days*864e5, enable:true, tgId:'', subId: randHex(16), reset:0 };
+  if(proto==='trojan'){ client.password = id; delete client.id; delete client.flow; }
+  if(proto==='shadowsocks'){
+    client.password = client.id || uuid(); delete client.id;
+  }
+  let settings;
+  if(proto==='vless') settings = { clients:[client], decryption:'none', fallbacks:[] };
+  else if(proto==='vmess') settings = { clients:[client], decryption:'auto', fallbacks:[] };
+  else if(proto==='trojan') settings = { clients:[client], fallbacks:[] };
+  else settings = { method: document.getElementById('ibSsMethod').value, password: uuid(), network:'tcp,udp', clients:[client] };
+
+  let stream;
+  if(net==='ws') stream = { network:'ws', security:sec, wsSettings:{ path: document.getElementById('ibPath').value || '/', headers:{} } };
+  else if(net==='grpc') stream = { network:'grpc', security:sec, grpcSettings:{ serviceName: document.getElementById('ibPath').value || randHex(8), multiMode:false, idle_timeout:60, health_check_timeout:20 } };
+  else if(net==='http') stream = { network:'http', security:sec, httpSettings:{ path: document.getElementById('ibPath').value || '/', host:[], method:'', maxConcurrentStreams:0 } };
+  else stream = { network:'tcp', security:sec, tcpSettings:{ acceptProxyProtocol:false, header:{ type:'none' } } };
+
+  if(sec==='tls'){
+    const certFile = document.getElementById('ibTlsCert').value.trim();
+    const keyFile = document.getElementById('ibTlsKey').value.trim();
+    stream.tlsSettings = {
+      serverName: document.getElementById('ibTlsSni').value.trim(),
+      rejectUnknownSni:false, minClientVer:'', maxClientVer:'',
+      certificates: (certFile && keyFile) ? [{ certificateFile:certFile, keyFile:keyFile, ocspStapling:3600, oneTimeLoading:false, usage:'encipherment' }] : []
+    };
+  } else if(sec==='reality'){
+    const sNames = document.getElementById('ibRSni').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const sIds = document.getElementById('ibRSid').value.split(',').map(s=>s.trim()).filter(Boolean);
+    if(!sNames.length) return { err:'Reality 需要至少一个 ServerName' };
+    if(!document.getElementById('ibRPriv').value) return { err:'Reality 密钥未生成' };
+    stream.realitySettings = {
+      show:false, dest: document.getElementById('ibRDest').value.trim() || 'www.microsoft.com:443', xver:0,
+      serverNames: sNames, privateKey: document.getElementById('ibRPriv').value.trim(),
+      publicKey: document.getElementById('ibRPub').value.trim(),
+      minClient:'', maxTimediff:0, shortIds: sIds, spiderX:'/'
+    };
+  }
+  const sniffing = { enabled: document.getElementById('ibSniff').checked, destOverride:['http','tls','quic'], metadataOnly:false, routeOnly:false };
+  const payload = {
+    up:0, down:0, total: totalGB*GB, remark, enable: document.getElementById('ibEnable').checked,
+    expiryTime: days*864e5, listen: document.getElementById('ibListen').value.trim(),
+    port, protocol: proto,
+    settings: JSON.stringify(settings), streamSettings: JSON.stringify(stream),
+    sniffing: JSON.stringify(sniffing), allocate: JSON.stringify({ strategy:'always', refresh:5, concurrency:3 })
+  };
+  return { payload, port, remark };
+}
+async function submitInbound(){
+  if(!ibCtx) return;
+  const built = buildIbPayload();
+  if(built.err){ const m=document.getElementById('ibMsg'); m.textContent=built.err; m.className='optMsg err'; return; }
+  const msg = document.getElementById('ibMsg');
+  msg.textContent='创建中…'; msg.className='optMsg';
+  try{
+    const r = await apiAct(ibCtx.svId, 'inbound/add', { payload: built.payload });
+    if(!r.ok) throw new Error(r.error || r.msg || '面板拒绝');
+    if(r.demo){ showToast('演示模式：入站已模拟创建'); closeIb(); return; }
+    let routeMsg = '';
+    if(document.getElementById('ibRoute').checked){
+      msg.textContent='已创建，正在写入路由规则…';
+      const tag = 'inbound-' + built.port;
+      const rr = await apiAct(ibCtx.svId, 'route/add', { inboundTag: tag, outboundTag: ibCtx.obTag });
+      routeMsg = rr.ok ? '，路由规则 ' + tag + ' → ' + ibCtx.obTag + ' 已写入' : '，⚠ 路由规则写入失败：' + (rr.error||rr.msg) + '（入站已创建，可稍后手动补）';
+    }
+    showToast('✓ 入站「' + built.remark + '」创建成功' + routeMsg, routeMsg.startsWith('，⚠') ? '' : 'ok');
+    closeIb();
+    manualRefresh();
+  }catch(e){
+    msg.textContent='✗ '+e.message; msg.className='optMsg err';
+  }
+}
+
+/* ---------- 新建客户端 ---------- */
+let clCtx = null;   // { svId, ibId }
+function openClModal(ibId){
+  const sv = SERVERS[cur]; if(!sv) return;
+  const ib = sv.inbounds.find(x=>x.id===ibId);
+  if(!ib) return;
+  clCtx = { svId: sv.id, ibId };
+  document.getElementById('clCtx').textContent = `将追加到入站「${ib.name}」（端口 ${ib.port} · ${ib.protocol}）`;
+  const isSs = ib.protocol==='shadowsocks';
+  const sec = (ib.stream && ib.stream.security) || 'none';
+  document.getElementById('clIdLabel').textContent = ib.protocol==='trojan' ? '密码 Password（Trojan）' : (isSs ? '密码 Password（SS）' : 'UUID');
+  document.getElementById('clIdF').style.display = '';
+  document.getElementById('clFlowF').style.display = (ib.protocol==='vless' && sec==='reality') ? '' : 'none';
+  document.getElementById('clEmail').value = 'client-' + randHex(4);
+  document.getElementById('clIdVal').value = uuid();
+  ['clTotal','clExpiry','clLimitIp'].forEach(id=>{ document.getElementById(id).value='0'; });
+  document.getElementById('clTg').value=''; document.getElementById('clSub').value='';
+  document.getElementById('clEnable').checked = true;
+  document.getElementById('clMsg').textContent='';
+  document.getElementById('clMask').style.display='flex';
+  document.getElementById('clEmail').focus();
+}
+function closeCl(){ document.getElementById('clMask').style.display='none'; }
+function clIdGen(){ document.getElementById('clIdVal').value = uuid(); }
+async function submitClient(){
+  if(!clCtx) return;
+  const sv = SERVERS[clCtx.svId];
+  const ib = sv && sv.inbounds.find(x=>x.id===clCtx.ibId);
+  const msg = document.getElementById('clMsg');
+  const email = document.getElementById('clEmail').value.trim();
+  if(!email){ msg.textContent='请填写名称/Email'; msg.className='optMsg err'; return; }
+  const proto = ib ? ib.protocol : 'vless';
+  const sec = (ib && ib.stream && ib.stream.security) || 'none';
+  const GB = 1024**3;
+  let id = document.getElementById('clIdVal').value.trim() || uuid();
+  const client = { id, flow: (proto==='vless' && sec==='reality') ? document.getElementById('clFlow').value : '',
+    email, limitIp:+document.getElementById('clLimitIp').value||0,
+    totalGB:(+document.getElementById('clTotal').value||0)*GB,
+    expiryTime:(+document.getElementById('clExpiry').value||0)*864e5,
+    enable: document.getElementById('clEnable').checked,
+    tgId: document.getElementById('clTg').value.trim(),
+    subId: document.getElementById('clSub').value.trim() || randHex(16), reset:0 };
+  if(proto==='trojan'){ client.password = id; delete client.id; delete client.flow; }
+  else if(proto==='shadowsocks'){ client.password = id; delete client.id; }
+  msg.textContent='创建中…'; msg.className='optMsg';
+  try{
+    const r = await apiAct(clCtx.svId, 'client/add', { inboundId: clCtx.ibId.replace(/^ib:/,''), client });
+    if(!r.ok) throw new Error(r.error || r.msg || '面板拒绝');
+    if(r.demo){ showToast('演示模式：客户端已模拟创建'); closeCl(); return; }
+    showToast('✓ 客户端「'+email+'」创建成功（'+(r.via||'addClient')+'）', 'ok');
+    closeCl();
+    manualRefresh();
+  }catch(e){
+    msg.textContent='✗ '+e.message; msg.className='optMsg err';
+  }
+}
+
+/* ---------- 客户端开关 ---------- */
+async function toggleClient(ib, c){
+  try{
+    const r = await apiAct(cur, 'client/toggle', { inboundId: ib.rid, email: c.email, enable: !c.enabled });
+    if(!r.ok) throw new Error(r.error || r.msg || '面板拒绝');
+    if(r.demo){ showToast('演示模式：已模拟' + (!c.enabled?'启用':'停用')); return; }
+    showToast('✓ 客户端「'+c.email+'」已'+(!c.enabled?'启用':'停用')+'，刷新中…', 'ok');
+    manualRefresh();
+  }catch(e){ showToast('开关失败：'+e.message, 'err'); }
+}
+
+/* ---------- 分享链接 / 复制 / 二维码 ---------- */
+function shareLink(ib, c){
+  const raw = c.raw || {};
+  const host = addrHost(), port = ib.port;
+  const st = ib.stream || {};
+  const net = st.network || 'tcp';
+  const sec = st.security || 'none';
+  const q = ['type=' + net];
+  if(net==='ws' && st.wsSettings && st.wsSettings.path) q.push('path=' + encodeURIComponent(st.wsSettings.path));
+  if(net==='grpc' && st.grpcSettings && st.grpcSettings.serviceName) q.push('serviceName=' + encodeURIComponent(st.grpcSettings.serviceName));
+  if(net==='http' && st.httpSettings && st.httpSettings.path) q.push('path=' + encodeURIComponent(st.httpSettings.path));
+  if(sec==='tls' && st.tlsSettings){
+    q.push('security=tls');
+    if(st.tlsSettings.serverName) q.push('sni=' + encodeURIComponent(st.tlsSettings.serverName));
+    q.push('fp=chrome');
+  } else if(sec==='reality' && st.realitySettings){
+    const r = st.realitySettings;
+    q.push('security=reality', 'fp=' + (raw.fp || 'chrome'));
+    if(r.serverNames && r.serverNames[0]) q.push('sni=' + encodeURIComponent(r.serverNames[0]));
+    if(r.publicKey) q.push('pbk=' + r.publicKey);
+    if(r.shortIds && r.shortIds[0]) q.push('sid=' + r.shortIds[0]);
+    q.push('spx=' + encodeURIComponent('/'));
+    if(raw.flow) q.push('flow=' + raw.flow);
+  }
+  const qs = q.filter(Boolean).join('&');
+  const name = encodeURIComponent(c.email || '');
+  if(ib.protocol==='vless'){
+    const id = raw.id || '';
+    if(!id) return null;
+    return `vless://${id}@${host}:${port}?${qs}#${name}`;
+  }
+  if(ib.protocol==='vmess'){
+    const id = raw.id || '';
+    if(!id) return null;
+    const obj = { v:'2', ps:c.email, add:host, port:String(port), id, aid:'0', scy:'auto', net, type:'', host,
+      path: net==='ws'&&st.wsSettings ? st.wsSettings.path : (net==='http'&&st.httpSettings ? st.httpSettings.path : ''),
+      tls: sec==='none' ? '' : sec,
+      sni: sec==='tls'&&st.tlsSettings ? st.tlsSettings.serverName : (sec==='reality'&&st.realitySettings&&st.realitySettings.serverNames[0]||''),
+      fp: sec==='none' ? '' : 'chrome' };
+    return 'vmess://' + btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+  }
+  if(ib.protocol==='trojan'){
+    const pw = raw.password || '';
+    if(!pw) return null;
+    return `trojan://${encodeURIComponent(pw)}@${host}:${port}?${qs}#${name}`;
+  }
+  if(ib.protocol==='shadowsocks'){
+    const pw = raw.password || '';
+    const method = (ib.settings && ib.settings.method) || 'chacha20-poly1305';
+    if(!pw) return null;
+    return `ss://${btoa(method+':'+pw)}@${host}:${port}#${name}`;
+  }
+  return null;
+}
+async function copyLink(ib, c){
+  const link = shareLink(ib, c);
+  if(!link){ showToast('无法生成链接：面板数据中缺少该客户端的 UUID/密码', 'err'); return; }
+  try{ await navigator.clipboard.writeText(link); showToast('✓ 链接已复制到剪贴板', 'ok'); }
+  catch(e){ showToast('复制失败（浏览器限制），链接已显示在二维码弹窗', 'err'); showQR(ib, c); }
+}
+let qrLibLoading = null;
+function loadQrLib(){
+  if(window.qrcode) return Promise.resolve();
+  if(qrLibLoading) return qrLibLoading;
+  qrLibLoading = new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+    s.onload = res; s.onerror = ()=>rej(new Error('二维码库加载失败（需联网）'));
+    document.head.appendChild(s);
+  });
+  return qrLibLoading;
+}
+let qrCurrent = '';
+function showQR(ib, c){
+  const link = shareLink(ib, c);
+  if(!link){ showToast('无法生成二维码：缺少 UUID/密码', 'err'); return; }
+  qrCurrent = link;
+  document.getElementById('qrTitle').textContent = '客户端二维码 · ' + c.email;
+  document.getElementById('qrLink').textContent = link;
+  document.getElementById('qrMask').style.display='flex';
+  const cv = document.getElementById('qrCanvas');
+  // 库未就绪时先画占位提示，避免首开出现几秒空白
+  cv.width = cv.height = 220;
+  const cx0 = cv.getContext('2d');
+  cx0.clearRect(0,0,220,220);
+  cx0.fillStyle = '#9AA0AE'; cx0.font = '13px sans-serif'; cx0.textAlign = 'center';
+  cx0.fillText('二维码生成中…', 110, 112);
+  loadQrLib().then(()=>{
+    const qr = window.qrcode(0, 'M');
+    qr.addData(link); qr.make();
+    const ctx = cv.getContext('2d');
+    const n = qr.getModuleCount(), cell = Math.floor(200/n), size = cell*n;
+    cv.width = cv.height = size + 20;
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.fillStyle='#1C1C1E';
+    for(let y=0;y<n;y++) for(let x=0;x<n;x++) if(qr.isDark(y,x)) ctx.fillRect(10+x*cell, 10+y*cell, cell, cell);
+  }).catch(e=>{ showToast(e.message, 'err'); });
+}
+function copyQrLink(){
+  navigator.clipboard.writeText(qrCurrent).then(()=>showToast('✓ 链接已复制', 'ok'))
+    .catch(()=>showToast('复制失败', 'err'));
+}
+function closeQr(){ document.getElementById('qrMask').style.display='none'; }
 
 /* ==================== 启动 ==================== */
 document.getElementById('gateBtn').onclick = gateSubmit;

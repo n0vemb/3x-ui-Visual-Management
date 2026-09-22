@@ -19,6 +19,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const ROOT = __dirname;
 const CFG_FILE = path.join(ROOT, 'config.json');
@@ -118,11 +119,12 @@ async function callPanel(sv, apiPath, { method = 'GET', retry = true } = {}) {
 /* ==================== 数据归一化 ==================== */
 
 function normInbound(ib) {
-  let setClients = [];
-  try {
-    const s = typeof ib.settings === 'string' ? JSON.parse(ib.settings) : ib.settings;
-    setClients = (s && s.clients) || [];
-  } catch (e) {}
+  // 原始 settings / streamSettings 解析后透传：新建客户端、复制分享链接都需要
+  let settings = null, stream = null, sniffing = null;
+  try { settings = typeof ib.settings === 'string' ? JSON.parse(ib.settings) : ib.settings; } catch (e) {}
+  try { stream = typeof ib.streamSettings === 'string' ? JSON.parse(ib.streamSettings) : ib.streamSettings; } catch (e) {}
+  try { sniffing = typeof ib.sniffing === 'string' ? JSON.parse(ib.sniffing) : ib.sniffing; } catch (e) {}
+  const setClients = (settings && settings.clients) || [];
   const stats = ib.clientStats || [];
   const seen = new Set();
   const clients = setClients.map(sc => {
@@ -134,7 +136,8 @@ function normInbound(ib) {
       up: st.up || 0,
       down: st.down || 0,
       total: st.total || 0,
-      expiryTime: st.expiryTime || 0
+      expiryTime: st.expiryTime || 0,
+      raw: sc || {}   // 原始客户端对象（id/flow/subId/limitIp/password/method...）
     };
   });
   // clientStats 是流量计数器，客户端删除后残留的统计项还在——只在 settings.clients 为空时才兜底，
@@ -143,7 +146,7 @@ function normInbound(ib) {
     stats.forEach(st => {
       if (!st.email || seen.has(st.email)) return;
       seen.add(st.email);
-      clients.push({ email: st.email, enable: st.enable !== false, up: st.up || 0, down: st.down || 0, total: st.total || 0, expiryTime: st.expiryTime || 0 });
+      clients.push({ email: st.email, enable: st.enable !== false, up: st.up || 0, down: st.down || 0, total: st.total || 0, expiryTime: st.expiryTime || 0, raw: {} });
     });
   }
   return {
@@ -151,12 +154,14 @@ function normInbound(ib) {
     tag: ib.tag || '',
     remark: ib.remark || ib.tag || ('入站#' + ib.id),
     port: ib.port,
+    listen: ib.listen || '',
     protocol: ib.protocol || '',
     enable: ib.enable !== false,
     up: ib.up || 0,
     down: ib.down || 0,
     total: ib.total || 0,
     expiryTime: ib.expiryTime || 0,
+    settings, stream, sniffing,
     clients
   };
 }
@@ -406,7 +411,8 @@ function demoData() {
   const cl = (email, usedGB, totalGB, online, days, enable = true) => {
     const used = Math.round(usedGB * GB);
     const total = totalGB == null ? 0 : Math.round(totalGB * GB);
-    return { email, enable, up: Math.round(used * 0.3), down: used - Math.round(used * 0.3), total, expiryTime: days == null ? 0 : now + days * 864e5, online };
+    return { email, enable, up: Math.round(used * 0.3), down: used - Math.round(used * 0.3), total, expiryTime: days == null ? 0 : now + days * 864e5, online,
+      raw: { id: 'demo-' + Math.random().toString(16).slice(2, 10) + '-' + Math.random().toString(16).slice(2, 6), flow: '' } };
   };
   const mkSv = (id, name, outbounds, inbounds, sys) => ({ id, name, online: true, lastUpdate: now, lastError: '', sys, outbounds, bindings: [], inbounds });
   const ob = (tag, ip, proto, enabled, flag, cc, country) => ({ tag, ip, port: null, proto, enabled, source: 'manual', flag, cc, country, up: 0, down: 0, total: 0 });
@@ -604,6 +610,145 @@ http.createServer(async (req2, res) => {
       return res.end(JSON.stringify({ ok: false, error: e.message }));
     }
   }
+  /* ==================== 面板写操作代理（新建入站/客户端、路由规则、开关）==================== */
+
+  const actM = u.pathname.match(/^\/api\/act\/([^/]+)\/(.+)$/);
+  if (actM && req2.method === 'POST') {
+    if (!authOK(req2)) { res.writeHead(401); return res.end('unauthorized'); }
+    // 演示模式：模拟成功，不触碰任何面板
+    if (cfg.demo) {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ ok: true, demo: true, msg: '演示模式：操作已模拟' }));
+    }
+    const sv = (cfg.servers || []).find(s => s.id === actM[1]);
+    if (!sv) { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, error: '找不到服务器 ' + actM[1] })); }
+    const op = actM[2];
+    const body = await readBody(req2);
+    if (!body) { res.writeHead(400); return res.end('bad json'); }
+    const jout = (o) => { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
+    const panelRes = (r) => ({ ok: !!(r && r.success !== false), msg: (r && r.msg) || '', demo: false });
+
+    try {
+      // --- 新建入站：payload 由前端按 3x-ui 表单组装（settings/streamSettings/sniffing 为 JSON 字符串），原样转发 ---
+      if (op === 'inbound/add') {
+        if (!body.payload || !body.payload.port || !body.payload.protocol) throw new Error('payload 不完整');
+        const r = await callPanel(sv, '/panel/api/inbounds/add', { method: 'POST', body: body.payload });
+        console.log('[act]', sv.id, '新建入站', body.payload.remark, body.payload.port, '→', r && r.success !== false ? '成功' : (r && r.msg));
+        return jout(panelRes(r));
+      }
+
+      // --- 新建客户端：优先 addClient，失败/不支持则 读入站→追加→update 整体写回（老版本兜底）---
+      if (op === 'client/add') {
+        if (!body.inboundId || !body.client) throw new Error('参数不完整');
+        const settingsArr = JSON.stringify([body.client]);
+        let r = null, via = 'addClient';
+        try {
+          r = await callPanel(sv, '/panel/api/inbounds/addClient', { method: 'POST', body: { id: body.inboundId, settings: settingsArr } });
+          if (!r || r.success === false) throw new Error((r && r.msg) || 'addClient 不可用');
+        } catch (e1) {
+          via = 'update(兜底)';
+          const j = await callPanel(sv, `/panel/api/inbounds/get/${body.inboundId}`);
+          const ib = j && j.obj;
+          if (!ib) throw new Error('获取入站失败：' + ((j && j.msg) || e1.message));
+          const st = JSON.parse(ib.settings || '{}');
+          st.clients = st.clients || [];
+          st.clients.push(body.client);
+          const payload = {
+            up: ib.up || 0, down: ib.down || 0, total: ib.total || 0, remark: ib.remark || '',
+            enable: ib.enable, expiryTime: ib.expiryTime || 0, listen: ib.listen || '',
+            port: ib.port, protocol: ib.protocol,
+            settings: JSON.stringify(st),
+            streamSettings: ib.streamSettings || '', sniffing: ib.sniffing || '', allocate: ib.allocate || ''
+          };
+          r = await callPanel(sv, `/panel/api/inbounds/update/${body.inboundId}`, { method: 'POST', body: payload });
+        }
+        console.log('[act]', sv.id, '新建客户端', body.client.email, '@入站', body.inboundId, `(${via})`);
+        return jout({ ...panelRes(r), via });
+      }
+
+      // --- 客户端启停开关：读入站→改 settings.clients 里对应 email 的 enable→update 写回（与面板数据源一致，最稳）---
+      if (op === 'client/toggle') {
+        if (!body.inboundId || !body.email) throw new Error('参数不完整');
+        const j = await callPanel(sv, `/panel/api/inbounds/get/${body.inboundId}`);
+        const ib = j && j.obj;
+        if (!ib) throw new Error('获取入站失败：' + ((j && j.msg) || ''));
+        const st = JSON.parse(ib.settings || '{}');
+        const c = (st.clients || []).find(x => x.email === body.email);
+        if (!c) throw new Error('面板上找不到客户端 ' + body.email);
+        c.enable = !!body.enable;
+        const payload = {
+          up: ib.up || 0, down: ib.down || 0, total: ib.total || 0, remark: ib.remark || '',
+          enable: ib.enable, expiryTime: ib.expiryTime || 0, listen: ib.listen || '',
+          port: ib.port, protocol: ib.protocol,
+          settings: JSON.stringify(st),
+          streamSettings: ib.streamSettings || '', sniffing: ib.sniffing || '', allocate: ib.allocate || ''
+        };
+        const r = await callPanel(sv, `/panel/api/inbounds/update/${body.inboundId}`, { method: 'POST', body: payload });
+        console.log('[act]', sv.id, '客户端', body.email, body.enable ? '启用' : '停用');
+        return jout(panelRes(r));
+      }
+
+      // --- 路由规则写回：读 Xray 模板 → 插入规则 → 写回（写前备份、失败自动回滚；面板 update 会自动重启 Xray）---
+      if (op === 'route/add') {
+        if (!body.inboundTag || !body.outboundTag) throw new Error('参数不完整');
+        const xr = await callPanel(sv, '/panel/api/xray/');
+        let obj = xr && xr.obj;
+        let tplStr = obj && typeof obj === 'object' ? (obj.xraySetting || '') : (typeof obj === 'string' ? obj : '');
+        if (!tplStr) throw new Error('未获取到 Xray 模板（GET /panel/api/xray/ 返回异常），请到面板 Xray 设置页手动加规则');
+        const tpl = JSON.parse(tplStr);
+        tpl.routing = tpl.routing || {};
+        tpl.routing.rules = tpl.routing.rules || [];
+        const dup = tpl.routing.rules.some(r => r && Array.isArray(r.inboundTag) && r.inboundTag.includes(body.inboundTag));
+        if (dup) return jout({ ok: true, msg: '已存在相同入站 tag 的路由规则，无需重复写入', demo: false });
+        const newRule = { inboundTag: [body.inboundTag], outboundTag: body.outboundTag, type: 'field' };
+        // 插到最后一条「带 inboundTag 的规则」之后（避免落在通用兜底规则 direct/block 之后的失配区）
+        let pos = -1;
+        tpl.routing.rules.forEach((r, i) => { if (r && (Array.isArray(r.inboundTag) || Array.isArray(r.user))) pos = i; });
+        tpl.routing.rules.splice(pos + 1, 0, newRule);
+        const newStr = JSON.stringify(tpl, null, 2);
+        // 写前备份
+        const bakDir = path.join(ROOT, 'backups');
+        try { fs.mkdirSync(bakDir, { recursive: true }); } catch (e) {}
+        const bakFile = path.join(bakDir, `xray_${sv.id}_${Date.now()}.json`);
+        try { fs.writeFileSync(bakFile, tplStr); } catch (e) {}
+        // 写回（面板收到 update 会校验并自动重启 Xray）
+        let r = null;
+        try {
+          r = await callPanel(sv, '/panel/api/xray/update', { method: 'POST', body: { xraySetting: newStr } });
+        } catch (e) {
+          r = { success: false, msg: e.message };
+        }
+        if (!r || r.success === false) {
+          // 失败自动回滚
+          let rollback = '';
+          try {
+            const rr = await callPanel(sv, '/panel/api/xray/update', { method: 'POST', body: { xraySetting: tplStr } });
+            rollback = rr && rr.success !== false ? '已自动回滚到原配置' : '回滚失败，请用备份文件手动恢复：' + bakFile;
+          } catch (e) { rollback = '回滚请求失败，请用备份文件手动恢复：' + bakFile; }
+          console.error('[act]', sv.id, '路由写回失败:', (r && r.msg), '备份:', bakFile);
+          throw new Error('路由规则写回失败：' + ((r && r.msg) || '') + '（' + rollback + '）');
+        }
+        console.log('[act]', sv.id, `路由规则 ${body.inboundTag} → ${body.outboundTag} 已写入，Xray 重启生效，备份:`, bakFile);
+        return jout({ ok: true, demo: false, msg: '路由规则已写入，Xray 重启生效', backup: bakFile });
+      }
+
+      return jout({ ok: false, error: '未知操作 ' + op });
+    } catch (e) {
+      return jout({ ok: false, error: e.message });
+    }
+  }
+
+  // --- Reality 密钥对生成（纯本地 x25519，无需面板）---
+  if (u.pathname === '/api/reality/new' && req2.method === 'GET') {
+    if (!authOK(req2)) { res.writeHead(401); return res.end('unauthorized'); }
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('x25519');
+    const privRaw = privateKey.export({ type: 'pkcs8', format: 'der' }).slice(-32);
+    const pubRaw = publicKey.export({ type: 'spki', format: 'der' }).slice(-32);
+    const b64u = b => Buffer.from(b).toString('base64url');
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ privateKey: b64u(privRaw), publicKey: b64u(pubRaw) }));
+  }
+
   let f = u.pathname === '/' ? '/index.html' : decodeURIComponent(u.pathname);
   f = path.join(ROOT, 'public', path.normalize(f));
   if (!f.startsWith(path.join(ROOT, 'public'))) { res.writeHead(403); return res.end(); }
