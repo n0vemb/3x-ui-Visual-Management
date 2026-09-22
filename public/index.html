@@ -310,7 +310,7 @@
       </div>
       <div id="ibRealBox" style="display:none">
         <div class="mgrid" style="margin-top:8px">
-          <div class="fld"><label>Dest（目标站点）</label><input id="ibRDest" value="www.microsoft.com:443"></div>
+          <div class="fld"><label>Target（回落目标站点，新版 Xray 必填）</label><input id="ibRDest" value="www.microsoft.com:443"></div>
           <div class="fld"><label>ServerNames（逗号分隔）</label><input id="ibRSni" placeholder="www.microsoft.com"></div>
           <div class="fld"><label>PrivateKey</label><div class="row2"><input id="ibRPriv"><button class="rbtn" onclick="ibRGen()">重新生成</button></div></div>
           <div class="fld"><label>PublicKey（分享链接用，自动生成）</label><input id="ibRPub" readonly></div>
@@ -1406,7 +1406,7 @@ function buildIbPayload(){
     if(!sNames.length) return { err:'Reality 需要至少一个 ServerName' };
     if(!document.getElementById('ibRPriv').value) return { err:'Reality 密钥未生成' };
     stream.realitySettings = {
-      show:false, dest: document.getElementById('ibRDest').value.trim() || 'www.microsoft.com:443', xver:0,
+      show:false, target: document.getElementById('ibRDest').value.trim() || 'www.microsoft.com:443', xver:0,
       serverNames: sNames, privateKey: document.getElementById('ibRPriv').value.trim(),
       publicKey: document.getElementById('ibRPub').value.trim(),
       minClient:'', maxTimediff:0, shortIds: sIds, spiderX:'/'
