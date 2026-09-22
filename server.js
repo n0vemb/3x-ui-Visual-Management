@@ -88,17 +88,34 @@ async function login(sv) {
   let ok = true;
   try { ok = JSON.parse(res.text).success !== false; } catch (e) {}
   if (!ok) throw new Error('登录被拒绝：用户名或密码错误');
-  sessions[sv.id] = { cookie, ts: Date.now() };
+  sessions[sv.id] = { cookie, ts: Date.now(), csrf: '' };
+  // 会话 CSRF token：v3.1.x 的 /panel/xray/* 等会话路由的写操作必需
+  try {
+    const r = await req(sv.url.replace(/\/+$/, '') + '/panel/csrf-token', {
+      method: 'GET',
+      headers: { 'Accept': 'application/json', 'Cookie': cookie },
+      insecure: !!sv.insecure,
+      timeout: sv.timeout || 12000
+    });
+    if (r.status === 200) {
+      const j = JSON.parse(r.text);
+      if (j && j.obj) sessions[sv.id].csrf = j.obj;
+    }
+  } catch (e) { /* 老版无此端点则跳过 */ }
 }
 
 async function callPanel(sv, apiPath, { method = 'GET', body = null, contentType = null, retry = true } = {}) {
+  // 双轨鉴权：API Token 走 /panel/api/*；Cookie 会话 + CSRF 走 /panel/xray/* 等
+  // 会话路由（v3.1.x 的 Xray 设置接口在会话组里，Token 进不去，必须同时登录）
+  if (!sessions[sv.id] && sv.username && sv.password) {
+    try { await login(sv); } catch (e) { sessions[sv.id] = { cookie: '', csrf: '', ts: 0 }; }
+  }
   const headers = { 'Accept': 'application/json' };
   if (contentType) headers['Content-Type'] = contentType;
-  if (sv.token) {
-    headers.Authorization = 'Bearer ' + sv.token;
-  } else if (sessions[sv.id]) {
-    headers.Cookie = sessions[sv.id].cookie;
-  }
+  const sess = sessions[sv.id];
+  if (sv.token) headers.Authorization = 'Bearer ' + sv.token;
+  if (sess && sess.cookie) headers.Cookie = sess.cookie;
+  if (sess && sess.csrf) headers['X-CSRF-Token'] = sess.csrf;
   let res;
   try {
     res = await req(sv.url.replace(/\/+$/, '') + apiPath, { method, headers, body, insecure: !!sv.insecure, timeout: sv.timeout || 12000 });
@@ -701,12 +718,12 @@ http.createServer(async (req2, res) => {
       // --- 路由规则写回：读 Xray 模板 → 插入规则 → 写回（写前备份、失败自动回滚；面板 update 会自动重启 Xray）---
       if (op === 'route/add') {
         if (!body.inboundTag || !body.outboundTag) throw new Error('参数不完整');
-        // 3.x 新版：POST /panel/api/xray/（obj 是「JSON 字符串」需二次解析）；老版本降级 GET /xray/get、GET /xray/
+        // 两代路径：v3.3+ 新版在 API 组 POST /panel/api/xray/；
+        // v3.1.x~3.2.x 在会话组 POST /panel/xray/（需 Cookie 登录 + X-CSRF-Token，login 时已取）
         const readTpl = async () => {
           const attempts = [
             ['POST', '/panel/api/xray/'],
-            ['GET', '/panel/api/xray/get'],
-            ['GET', '/panel/api/xray/']
+            ['POST', '/panel/xray/']
           ];
           for (const [m, p] of attempts) {
             try {
@@ -717,7 +734,7 @@ http.createServer(async (req2, res) => {
               if (raw) return typeof raw === 'string' ? raw : JSON.stringify(raw);
             } catch (e) { /* 试下一个端点 */ }
           }
-          throw new Error('无法读取 Xray 模板（已尝试 POST /panel/api/xray/ 及老版 GET 端点），请到面板 Xray 设置页手动加规则');
+          throw new Error('无法读取 Xray 模板（已尝试 /panel/api/xray/ 与 /panel/xray/ 两组端点）。若是 v3.1.x 面板，请确认配置里填了正确的用户名密码（需要会话登录+CSRF，仅 Token 不够）');
         };
         let tplStr = await readTpl();
         const tpl = JSON.parse(tplStr);
@@ -736,11 +753,30 @@ http.createServer(async (req2, res) => {
         try { fs.mkdirSync(bakDir, { recursive: true }); } catch (e) {}
         const bakFile = path.join(bakDir, `xray_${sv.id}_${Date.now()}.json`);
         try { fs.writeFileSync(bakFile, tplStr); } catch (e) {}
-        // 写回（新版 updateSetting 用 c.PostForm 收参，必须表单编码；面板收到 update 会校验并自动重启 Xray）
-        const updForm = (s) => callPanel(sv, '/panel/api/xray/update', { method: 'POST', contentType: 'application/x-www-form-urlencoded', body: 'xraySetting=' + encodeURIComponent(s) });
+        // 写回（两代 updateSetting 都用 c.PostForm 收参，必须表单编码；面板收到 update 会校验并自动重启 Xray）
+        const tryWrite = async (s) => {
+          // 先试新版 API 组端点，404 则降级 v3.1.x 会话组端点；CSRF 失效自动刷新重试一次
+          const attempt = async () => {
+            try {
+              return await callPanel(sv, '/panel/api/xray/update', { method: 'POST', contentType: 'application/x-www-form-urlencoded', body: 'xraySetting=' + encodeURIComponent(s) });
+            } catch (e) {
+              if (e.status && e.status !== 404) throw e;
+              return await callPanel(sv, '/panel/xray/update', { method: 'POST', contentType: 'application/x-www-form-urlencoded', body: 'xraySetting=' + encodeURIComponent(s) });
+            }
+          };
+          try {
+            return await attempt();
+          } catch (e) {
+            if (e.status === 403 && sv.username && sv.password) {
+              await login(sv);
+              return await attempt();
+            }
+            throw e;
+          }
+        };
         let r = null;
         try {
-          r = await updForm(newStr);
+          r = await tryWrite(newStr);
         } catch (e) {
           r = { success: false, msg: e.message };
         }
@@ -748,7 +784,7 @@ http.createServer(async (req2, res) => {
           // 失败自动回滚
           let rollback = '';
           try {
-            const rr = await updForm(tplStr);
+            const rr = await tryWrite(tplStr);
             rollback = rr && rr.success !== false ? '已自动回滚到原配置' : '回滚失败，请用备份文件手动恢复：' + bakFile;
           } catch (e) { rollback = '回滚请求失败，请用备份文件手动恢复：' + bakFile; }
           console.error('[act]', sv.id, '路由写回失败:', (r && r.msg), '备份:', bakFile);
