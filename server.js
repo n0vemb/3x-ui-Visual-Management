@@ -91,8 +91,9 @@ async function login(sv) {
   sessions[sv.id] = { cookie, ts: Date.now() };
 }
 
-async function callPanel(sv, apiPath, { method = 'GET', retry = true } = {}) {
+async function callPanel(sv, apiPath, { method = 'GET', body = null, contentType = null, retry = true } = {}) {
   const headers = { 'Accept': 'application/json' };
+  if (contentType) headers['Content-Type'] = contentType;
   if (sv.token) {
     headers.Authorization = 'Bearer ' + sv.token;
   } else if (sessions[sv.id]) {
@@ -100,13 +101,13 @@ async function callPanel(sv, apiPath, { method = 'GET', retry = true } = {}) {
   }
   let res;
   try {
-    res = await req(sv.url.replace(/\/+$/, '') + apiPath, { method, headers, insecure: !!sv.insecure, timeout: sv.timeout || 12000 });
+    res = await req(sv.url.replace(/\/+$/, '') + apiPath, { method, headers, body, insecure: !!sv.insecure, timeout: sv.timeout || 12000 });
   } catch (e) {
     throw new Error('连接失败: ' + e.message);
   }
   if (res.status === 401 && retry && !sv.token) {
     await login(sv);
-    return callPanel(sv, apiPath, { method, retry: false });
+    return callPanel(sv, apiPath, { method, body, contentType, retry: false });
   }
   if (res.status !== 200) {
     const e = new Error('HTTP ' + res.status + ' ' + apiPath);
@@ -637,30 +638,38 @@ http.createServer(async (req2, res) => {
         return jout(panelRes(r));
       }
 
-      // --- 新建客户端：优先 addClient，失败/不支持则 读入站→追加→update 整体写回（老版本兜底）---
+      // --- 新建客户端：3.x 新版走 /panel/api/clients/add（JSON），2.x 老版降级 inbounds/addClient（表单），
+      //     再不行则 读入站→追加→update 整体写回（最终兜底）---
       if (op === 'client/add') {
         if (!body.inboundId || !body.client) throw new Error('参数不完整');
         const settingsArr = JSON.stringify([body.client]);
-        let r = null, via = 'addClient';
+        let r = null, via = 'clients/add(3.x)';
         try {
-          r = await callPanel(sv, '/panel/api/inbounds/addClient', { method: 'POST', body: { id: body.inboundId, settings: settingsArr } });
-          if (!r || r.success === false) throw new Error((r && r.msg) || 'addClient 不可用');
+          r = await callPanel(sv, '/panel/api/clients/add', { method: 'POST', body: { client: body.client, inboundIds: [body.inboundId] } });
+          if (!r || r.success === false) throw new Error((r && r.msg) || 'clients/add 不可用');
         } catch (e1) {
-          via = 'update(兜底)';
-          const j = await callPanel(sv, `/panel/api/inbounds/get/${body.inboundId}`);
-          const ib = j && j.obj;
-          if (!ib) throw new Error('获取入站失败：' + ((j && j.msg) || e1.message));
-          const st = JSON.parse(ib.settings || '{}');
-          st.clients = st.clients || [];
-          st.clients.push(body.client);
-          const payload = {
-            up: ib.up || 0, down: ib.down || 0, total: ib.total || 0, remark: ib.remark || '',
-            enable: ib.enable, expiryTime: ib.expiryTime || 0, listen: ib.listen || '',
-            port: ib.port, protocol: ib.protocol,
-            settings: JSON.stringify(st),
-            streamSettings: ib.streamSettings || '', sniffing: ib.sniffing || '', allocate: ib.allocate || ''
-          };
-          r = await callPanel(sv, `/panel/api/inbounds/update/${body.inboundId}`, { method: 'POST', body: payload });
+          via = 'addClient(2.x)';
+          try {
+            r = await callPanel(sv, '/panel/api/inbounds/addClient', { method: 'POST', contentType: 'application/x-www-form-urlencoded', body: 'id=' + encodeURIComponent(body.inboundId) + '&settings=' + encodeURIComponent(settingsArr) });
+            if (!r || r.success === false) throw new Error((r && r.msg) || 'addClient 不可用');
+          } catch (e2) {
+            via = 'update(兜底)';
+            const j = await callPanel(sv, `/panel/api/inbounds/get/${body.inboundId}`);
+            const ib = j && j.obj;
+            if (!ib) throw new Error('获取入站失败：' + ((j && j.msg) || e2.message));
+            const st = JSON.parse(ib.settings || '{}');
+            st.clients = st.clients || [];
+            st.clients.push(body.client);
+            const payload = {
+              up: ib.up || 0, down: ib.down || 0, total: ib.total || 0, remark: ib.remark || '',
+              enable: ib.enable, expiryTime: ib.expiryTime || 0, listen: ib.listen || '',
+              port: ib.port, protocol: ib.protocol,
+              trafficReset: ib.trafficReset || 'never', subSortIndex: ib.subSortIndex || 0, tag: ib.tag || '',
+              settings: JSON.stringify(st),
+              streamSettings: ib.streamSettings || '', sniffing: ib.sniffing || ''
+            };
+            r = await callPanel(sv, `/panel/api/inbounds/update/${body.inboundId}`, { method: 'POST', body: payload });
+          }
         }
         console.log('[act]', sv.id, '新建客户端', body.client.email, '@入站', body.inboundId, `(${via})`);
         return jout({ ...panelRes(r), via });
@@ -680,8 +689,9 @@ http.createServer(async (req2, res) => {
           up: ib.up || 0, down: ib.down || 0, total: ib.total || 0, remark: ib.remark || '',
           enable: ib.enable, expiryTime: ib.expiryTime || 0, listen: ib.listen || '',
           port: ib.port, protocol: ib.protocol,
+          trafficReset: ib.trafficReset || 'never', subSortIndex: ib.subSortIndex || 0, tag: ib.tag || '',
           settings: JSON.stringify(st),
-          streamSettings: ib.streamSettings || '', sniffing: ib.sniffing || '', allocate: ib.allocate || ''
+          streamSettings: ib.streamSettings || '', sniffing: ib.sniffing || ''
         };
         const r = await callPanel(sv, `/panel/api/inbounds/update/${body.inboundId}`, { method: 'POST', body: payload });
         console.log('[act]', sv.id, '客户端', body.email, body.enable ? '启用' : '停用');
@@ -691,10 +701,25 @@ http.createServer(async (req2, res) => {
       // --- 路由规则写回：读 Xray 模板 → 插入规则 → 写回（写前备份、失败自动回滚；面板 update 会自动重启 Xray）---
       if (op === 'route/add') {
         if (!body.inboundTag || !body.outboundTag) throw new Error('参数不完整');
-        const xr = await callPanel(sv, '/panel/api/xray/');
-        let obj = xr && xr.obj;
-        let tplStr = obj && typeof obj === 'object' ? (obj.xraySetting || '') : (typeof obj === 'string' ? obj : '');
-        if (!tplStr) throw new Error('未获取到 Xray 模板（GET /panel/api/xray/ 返回异常），请到面板 Xray 设置页手动加规则');
+        // 3.x 新版：POST /panel/api/xray/（obj 是「JSON 字符串」需二次解析）；老版本降级 GET /xray/get、GET /xray/
+        const readTpl = async () => {
+          const attempts = [
+            ['POST', '/panel/api/xray/'],
+            ['GET', '/panel/api/xray/get'],
+            ['GET', '/panel/api/xray/']
+          ];
+          for (const [m, p] of attempts) {
+            try {
+              const xr = await callPanel(sv, p, { method: m });
+              let o = xr && xr.obj;
+              if (typeof o === 'string') { try { o = JSON.parse(o); } catch (e) { o = null; } }
+              const raw = o && (o.xraySetting !== undefined ? o.xraySetting : o);
+              if (raw) return typeof raw === 'string' ? raw : JSON.stringify(raw);
+            } catch (e) { /* 试下一个端点 */ }
+          }
+          throw new Error('无法读取 Xray 模板（已尝试 POST /panel/api/xray/ 及老版 GET 端点），请到面板 Xray 设置页手动加规则');
+        };
+        let tplStr = await readTpl();
         const tpl = JSON.parse(tplStr);
         tpl.routing = tpl.routing || {};
         tpl.routing.rules = tpl.routing.rules || [];
@@ -711,10 +736,11 @@ http.createServer(async (req2, res) => {
         try { fs.mkdirSync(bakDir, { recursive: true }); } catch (e) {}
         const bakFile = path.join(bakDir, `xray_${sv.id}_${Date.now()}.json`);
         try { fs.writeFileSync(bakFile, tplStr); } catch (e) {}
-        // 写回（面板收到 update 会校验并自动重启 Xray）
+        // 写回（新版 updateSetting 用 c.PostForm 收参，必须表单编码；面板收到 update 会校验并自动重启 Xray）
+        const updForm = (s) => callPanel(sv, '/panel/api/xray/update', { method: 'POST', contentType: 'application/x-www-form-urlencoded', body: 'xraySetting=' + encodeURIComponent(s) });
         let r = null;
         try {
-          r = await callPanel(sv, '/panel/api/xray/update', { method: 'POST', body: { xraySetting: newStr } });
+          r = await updForm(newStr);
         } catch (e) {
           r = { success: false, msg: e.message };
         }
@@ -722,7 +748,7 @@ http.createServer(async (req2, res) => {
           // 失败自动回滚
           let rollback = '';
           try {
-            const rr = await callPanel(sv, '/panel/api/xray/update', { method: 'POST', body: { xraySetting: tplStr } });
+            const rr = await updForm(tplStr);
             rollback = rr && rr.success !== false ? '已自动回滚到原配置' : '回滚失败，请用备份文件手动恢复：' + bakFile;
           } catch (e) { rollback = '回滚请求失败，请用备份文件手动恢复：' + bakFile; }
           console.error('[act]', sv.id, '路由写回失败:', (r && r.msg), '备份:', bakFile);
