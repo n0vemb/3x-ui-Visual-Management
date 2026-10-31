@@ -1763,7 +1763,9 @@ function showTest(v){
   document.querySelector('.canvas-wrap').style.display = v ? 'none' : '';
   document.getElementById('testView').style.display = v ? '' : 'none';
   // 拨测页内容超出一屏，切进去时放开整页滚动；回画布时收回
-  document.body.classList.toggle('tvscroll', v);
+  // 注意 html 和 body 都设了 overflow:hidden，两层都要放开才能滚
+  document.documentElement.style.overflow = v ? 'auto' : '';
+  document.documentElement.style.height = v ? 'auto' : '';
   document.body.style.overflow = v ? 'auto' : '';
   document.body.style.height = v ? 'auto' : '';
   if (v) { window.scrollTo(0, 0); tvInit(); } else { tvStopPoll(); }
