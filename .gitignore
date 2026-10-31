@@ -9,3 +9,8 @@ nohup.out
 
 # 依赖（本项目零依赖，防御性排除）
 node_modules/
+
+# 拨测引擎运行产物
+bin/
+.testrun-*/
+test_history.jsonl

@@ -170,6 +170,63 @@
   /* ===== 全局提示 toast ===== */
   #toast { position:fixed; left:50%; bottom:44px; transform:translateX(-50%); background:#1C1C1E; color:#fff; font-size:12px; padding:9px 18px; border-radius:99px; z-index:300; display:none; box-shadow:0 8px 24px rgba(0,0,0,.25); max-width:72vw; line-height:1.5; }
   #toast.ok { background:#0E8A5F; } #toast.err { background:#C63A3F; }
+  /* ===== 拨测标签页（作用域限定 #testView）===== */
+  #testView { max-width:1180px; margin:0 auto; padding:16px 24px 60px; }
+  #testView .tcard { background:#fff; border:1px solid #E7EAF0; border-radius:12px; padding:14px 16px; margin-bottom:14px; box-shadow:0 2px 8px rgba(30,50,90,.04); }
+  #testView h2 { font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  #testView .tchip { font-size:11px; border-radius:20px; padding:3px 10px; border:1px solid #E2E7F0; background:#F7F9FC; color:#5A6377; display:inline-flex; align-items:center; gap:6px; }
+  #testView .tchip.ok { background:#E5F6EC; border-color:#BFE6CF; color:#1E8E4D; }
+  #testView .tchip.warn { background:#FFF4E0; border-color:#F0D9A8; color:#B76E00; }
+  #testView .tchip.down { background:#E8F0FD; border-color:#C9DDFB; color:#3B76E0; }
+  #testView .tchip .bar { width:60px; height:4px; background:#DDE5F2; border-radius:3px; overflow:hidden; }
+  #testView .tchip .bar i { display:block; height:100%; background:#3B76E0; width:0; }
+  #testView .tctrl { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  #testView .tctrl label { font-size:11.5px; color:#5A6377; }
+  #testView .tctrl select, #testView .tctrl input[type=number], #testView .tctrl input[type=text] { border:1px solid #DDE2EC; border-radius:7px; padding:5px 8px; font-size:12px; outline:none; background:#fff; }
+  #testView .tctrl select:focus, #testView .tctrl input:focus { border-color:#3B76E0; }
+  #testView .sep { width:1px; height:20px; background:#E7EAF0; }
+  #testView .tbtn { border:none; border-radius:8px; font-size:12.5px; padding:8px 16px; cursor:pointer; }
+  #testView .tbtn.pri { background:#3B76E0; color:#fff; } #testView .tbtn.pri:hover { background:#2F63C4; }
+  #testView .tbtn.pri:disabled { background:#A9C4EE; cursor:not-allowed; }
+  #testView .tbtn.stop { background:#FDECEC; color:#C2503D; border:1px solid #F2C7C0; }
+  #testView #tvProg { display:none; margin-top:12px; border-top:1px dashed #E7EAF0; padding-top:12px; }
+  #testView #tvProg.show { display:block; }
+  #testView #tvPbarO { height:8px; background:#EDF1F8; border-radius:5px; overflow:hidden; }
+  #testView #tvPbar { height:100%; background:linear-gradient(90deg,#3B76E0,#31B368); width:0; transition:width .25s; }
+  #testView #tvPTxt { display:flex; gap:16px; font-size:11.5px; color:#5A6377; margin-top:8px; flex-wrap:wrap; }
+  #testView .cPass { color:#1E8E4D; } #testView .cFail { color:#C2503D; } #testView .cSkip { color:#8A90A0; } #testView .cRun { color:#3B76E0; }
+  #testView .switch { width:38px; height:21px; border-radius:12px; background:#C3C9D4; position:relative; cursor:pointer; transition:.2s; flex:none; }
+  #testView .switch::after { content:''; position:absolute; top:2.5px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  #testView .switch.on { background:#31B368; }
+  #testView .switch.on::after { left:19px; }
+  #testView table { width:100%; border-collapse:collapse; font-size:12px; }
+  #testView thead th { text-align:left; font-size:11px; color:#8A90A0; font-weight:500; padding:7px 8px; border-bottom:1px solid #E7EAF0; position:sticky; top:0; background:#fff; }
+  #testView tbody td { padding:8px; border-bottom:1px solid #F2F4F8; vertical-align:middle; }
+  #testView tbody tr:hover { background:#F9FBFE; }
+  #testView .svRow td { background:#F7F9FC; font-size:11.5px; font-weight:600; color:#3D475C; }
+  #testView .ibRow td { background:#FBFCFE; font-size:11px; color:#7C8AA5; padding-left:26px; }
+  #testView .st { width:14px; height:14px; border-radius:50%; display:inline-block; vertical-align:-2px; }
+  #testView .st.idle { background:#E2E7F0; }
+  #testView .st.run { background:conic-gradient(#3B76E0 0 25%, #DCE6F8 0 50%, #3B76E0 0 75%, #DCE6F8 0); animation:tvSpin 1s linear infinite; }
+  @keyframes tvSpin { to { transform:rotate(360deg); } }
+  #testView .st.pass { background:#31B368; box-shadow:0 0 5px rgba(49,179,104,.5); }
+  #testView .st.fail { background:#D9503C; box-shadow:0 0 5px rgba(217,80,60,.45); }
+  #testView .st.skip { background:transparent; border:2px solid #C3C9D4; width:10px; height:10px; }
+  #testView .tr8 { display:inline-flex; gap:3px; align-items:center; }
+  #testView .tr8 i { width:6px; height:6px; border-radius:50%; background:#E2E7F0; }
+  #testView .tr8 i.p { background:#31B368; } #testView .tr8 i.f { background:#D9503C; }
+  #testView .mini { border:1px solid #E2E7F0; background:#F7F9FC; border-radius:6px; font-size:10.5px; padding:2px 9px; cursor:pointer; color:#5A6377; }
+  #testView .mini:hover { background:#EDF1F8; }
+  #testView .mini:disabled { opacity:.45; cursor:not-allowed; }
+  #testView .errTx { color:#C2503D; font-size:11px; cursor:help; text-decoration:underline dotted; }
+  #testView .hItem { border:1px solid #E7EAF0; border-radius:9px; padding:9px 12px; margin-bottom:8px; cursor:pointer; }
+  #testView .hItem:hover { background:#F9FBFE; }
+  #testView .hItem .r1 { display:flex; gap:14px; align-items:center; font-size:12px; flex-wrap:wrap; }
+  #testView .hItem .t { font-weight:600; }
+  #testView .hItem .r2 { display:none; margin-top:8px; border-top:1px dashed #E7EAF0; padding-top:8px; font-size:11.5px; max-height:180px; overflow:auto; }
+  #testView .hItem.open .r2 { display:block; }
+  #testView .hItem .r2 div { display:flex; gap:10px; padding:2px 0; color:#5A6377; }
+  #testView .tempty { text-align:center; color:#A6ACBA; font-size:12px; padding:20px 0; }
 </style>
 </head>
 <body>
@@ -200,6 +257,73 @@
   <button class="btn" style="right:100px; top:16px" onclick="resetView()">重置视图</button>
   <button class="btn" style="right:184px; top:16px" onclick="resetLayout()">重置布局</button>
   <button class="btn" style="right:268px; top:16px" id="btnExpand" onclick="toggleExpandAll()">一键展开</button>
+</div>
+
+<!-- 拨测标签页 -->
+<div id="testView" style="display:none">
+
+  <div class="tcard">
+    <h2>拨测引擎
+      <span class="tchip" id="tvEngChip"></span>
+      <span class="tchip warn" id="tvDemoChip" style="display:none">演示模式 · 结果为模拟</span>
+    </h2>
+    <div class="tctrl">
+      <button class="tbtn pri" id="tvBtnRun" onclick="tvRunAll()">▶ 批量测试（全部客户端）</button>
+      <button class="tbtn stop" id="tvBtnStop" onclick="tvStop()" style="display:none">■ 停止</button>
+      <div class="sep"></div>
+      <label>并发 <select id="tvConc"><option>10</option><option>5</option><option>20</option></select></label>
+      <label>超时 <select id="tvTmo"><option>8</option><option>5</option><option>12</option></select> s</label>
+      <label>目标 <select id="tvTgt" onchange="tvTgtChanged()"><option value="gstatic">gstatic generate_204</option><option value="cloudflare">cp.cloudflare.com</option><option value="custom">自定义…</option></select></label>
+      <input type="text" id="tvTgtUrl" placeholder="http://your-host/healthz" style="display:none;width:200px" oninput="tvTgtHint()">
+      <label><input type="checkbox" id="tvOnlyOn" checked> 仅测启用的客户端</label>
+    </div>
+    <div id="tvTgtHint" style="display:none;font-size:11px;margin-top:8px;"></div>
+    <div id="tvProg">
+      <div id="tvPbarO"><div id="tvPbar"></div></div>
+      <div id="tvPTxt">
+        <span>进度 <b id="tvDone">0</b>/<b id="tvAll">0</b></span>
+        <span class="cPass">✓ 通过 <b id="tvPass">0</b></span>
+        <span class="cFail">✗ 失败 <b id="tvFail">0</b></span>
+        <span class="cSkip">○ 跳过 <b id="tvSkip">0</b></span>
+        <span>平均延迟 <b id="tvAvg">—</b></span>
+        <span class="cRun" id="tvCur"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tcard">
+    <h2>定时测试</h2>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div class="switch" id="tvSchSw" onclick="tvToggleSched()"></div>
+      <div style="font-size:12.5px">定时批量测试<small style="display:block;font-size:10.5px;color:#8A90A0;margin-top:2px">默认关闭；开启后每 X 分钟自动跑一轮并写入历史</small></div>
+      <label style="font-size:12px;color:#5A6377">间隔 <input type="number" id="tvSchMin" value="30" min="1" max="720" style="width:64px;border:1px solid #DDE2EC;border-radius:7px;padding:4px 8px;"> 分钟</label>
+      <span id="tvNextRun" style="font-size:12px;color:#1E8E4D;font-weight:600;display:none">下次测试 <span id="tvNextT">--:--</span></span>
+    </div>
+  </div>
+
+  <div class="tcard">
+    <h2>客户端拨测状态
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <select id="tvFsv" onchange="tvRender()" style="border:1px solid #DDE2EC;border-radius:7px;padding:4px 8px;font-size:12px;"><option value="">全部服务器</option></select>
+        <label style="font-size:11.5px;color:#5A6377"><input type="checkbox" id="tvFfail" onchange="tvRender()"> 只看失败</label>
+      </span>
+    </h2>
+    <div style="max-height:480px;overflow:auto;">
+      <table>
+        <thead><tr>
+          <th style="width:34px">状态</th><th>客户端</th><th>协议 / 端口</th><th style="width:90px">延迟</th>
+          <th style="width:170px">最近结果</th><th style="width:120px">趋势（近8次）</th><th style="width:80px">上次测试</th><th style="width:60px"></th>
+        </tr></thead>
+        <tbody id="tvBody"><tr><td colspan="8"><div class="tempty">正在加载…</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tcard">
+    <h2>测试历史 <span class="tchip" id="tvHcount">0 条</span></h2>
+    <div id="tvHist"><div class="tempty">还没有测试记录</div></div>
+  </div>
+
 </div>
 
 <div id="tooltip"></div>
@@ -430,6 +554,8 @@ async function manualRefresh() {
 function applyData(data) {
   const next = {};
   (data.servers || []).forEach(sv => {
+    let host = '';
+    try { host = new URL(sv.url).hostname; } catch (e) {}
     // 内置出站（direct/block）没有入站绑定时不显示，减少无用尾巴
     const boundTags = new Set((sv.inbounds || []).map(ib => ib.ob).filter(Boolean));
     const outbounds = (sv.outbounds || [])
@@ -486,7 +612,7 @@ function applyData(data) {
       };
     });
     next[sv.id] = {
-      id: sv.id, label: sv.name, url: sv.url || '',
+      id: sv.id, label: sv.name, url: sv.url || '', host,
       dot: !sv.online ? 'err' : (sv.lastError ? 'warn' : ((sv.sys && sv.sys.xray === 'error') ? 'warn' : 'ok')),
       sys: sv.sys, updated: sv.lastUpdate,
       outbounds, inbounds
@@ -496,6 +622,7 @@ function applyData(data) {
   if (!SERVERS[cur] || firstLoad) cur = Object.keys(SERVERS)[0] || null;
   Object.values(SERVERS).forEach(layoutServer);
   render();
+  if (typeof testMode !== 'undefined' && testMode) tvRender();
   if (firstLoad) { firstLoad = false; fitView(); }
 }
 
@@ -784,12 +911,18 @@ function updateWorldBounds(sv){
 function renderTabs(){
   const el = document.getElementById('tabs');
   el.innerHTML = Object.entries(SERVERS).map(([id,s])=>`
-    <div class="tab ${id===cur?'active':''}" data-tab="${id}" title="${(s.lastError||'').replace(/"/g,'')}">
+    <div class="tab ${id===cur && !testMode?'active':''}" data-tab="${id}" title="${(s.lastError||'').replace(/"/g,'')}">
       <span class="d d-${s.dot}"></span>${s.label}
       ${s.url?`<span class="jump" data-jump="${id}" title="转到面板（新窗口打开）">↗</span>`:''}
-    </div>`).join('') + `<div class="addTab" onclick="openSettings()" title="服务器管理：添加 / 编辑 / 删除">＋</div>`;
+    </div>`).join('')
+    + `<div class="tab ${testMode?'active':''}" data-tab="__test" title="客户端批量拨测">🧪 拨测</div>`
+    + `<div class="addTab" onclick="openSettings()" title="服务器管理：添加 / 编辑 / 删除">＋</div>`;
   el.querySelectorAll('[data-tab]').forEach(t=>{
-    t.onclick = ()=>{ cur = t.dataset.tab; resetView(); };
+    t.onclick = ()=>{
+      if (t.dataset.tab === '__test') { showTest(true); return; }
+      showTest(false);
+      cur = t.dataset.tab; resetView();
+    };
   });
   el.querySelectorAll('[data-jump]').forEach(j=>{
     j.onclick = e=>{
@@ -1618,6 +1751,253 @@ function copyQrLink(){
     .catch(()=>showToast('复制失败', 'err'));
 }
 function closeQr(){ document.getElementById('qrMask').style.display='none'; }
+
+/* ==================== 客户端批量拨测 ==================== */
+let testMode = false, tvStatus = null, tvHistData = [], tvPoll = null;
+let tvTrend = {}, tvPrev = {};   // 会话内趋势（key -> ['p'|'f', ...]）
+let tvLastDetail = null;         // 最近一轮完成的明细（历史展开用）
+
+function showTest(v){
+  testMode = v;
+  document.querySelector('.canvas-wrap').style.display = v ? 'none' : '';
+  document.getElementById('testView').style.display = v ? '' : 'none';
+  if (v) { tvInit(); } else { tvStopPoll(); }
+  renderTabs();
+}
+function tvApi(path, opts={}){
+  return fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', ...authHeaders() } })
+    .then(r => r.json());
+}
+function tvEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+
+async function tvInit(){
+  try {
+    tvStatus = await tvApi('/api/tester/status');
+    tvHistData = await tvApi('/api/tester/history');
+  } catch(e){ showToast('拨测状态获取失败: ' + e.message, 'err'); return; }
+  // 服务器筛选下拉
+  const fsv = document.getElementById('tvFsv');
+  const keep = fsv.value;
+  fsv.innerHTML = '<option value="">全部服务器</option>' + Object.values(SERVERS).map(s=>`<option>${tvEsc(s.label)}</option>`).join('');
+  fsv.value = keep;
+  tvApplyStatus();
+  tvRenderHist();
+  tvRender();
+  if (tvStatus.job && tvStatus.job.running) tvStartPoll();
+}
+function tvApplyStatus(){
+  const st = tvStatus; if (!st) return;
+  const demo = !!st.demo;
+  document.getElementById('tvDemoChip').style.display = demo ? '' : 'none';
+  const eng = document.getElementById('tvEngChip');
+  const bin = st.bin || {};
+  if (demo) { eng.style.display = 'none'; }
+  else if (bin.installed) { eng.className='tchip ok'; eng.textContent = 'xray-core ' + (bin.version || '') + ' · 已就绪'; }
+  else if (bin.downloading) { eng.className='tchip down'; eng.innerHTML = `⬇ 下载 xray-core ${bin.progress}% <span class="bar"><i style="width:${bin.progress}%"></i></span>`; }
+  else { eng.className='tchip warn'; eng.textContent = '⬇ xray-core 未安装（批量测试时自动下载）'; eng.style.display=''; }
+  eng.style.display = demo ? 'none' : '';
+  // 设置回填
+  const s = st.settings || {};
+  document.getElementById('tvConc').value = s.concurrency || 10;
+  document.getElementById('tvTmo').value = s.timeout || 8;
+  document.getElementById('tvTgt').value = s.targetMode || 'gstatic';
+  document.getElementById('tvTgtUrl').value = s.customTarget || '';
+  document.getElementById('tvSchMin').value = s.scheduleMinutes || 30;
+  document.getElementById('tvSchSw').classList.toggle('on', !!s.scheduleEnabled);
+  tvTgtChanged();
+  tvNextRunTick(st.nextRunAt, s.scheduleEnabled);
+  // 任务进度回填
+  if (st.job) {
+    const j = st.job;
+    if (j.results) { for (const k of Object.keys(j.results)) { const rs = j.results[k]; if (rs.st==='pass'||rs.st==='fail') tvMarkTrend(k, rs.st); } }
+    tvFillProg(j);
+  }
+  document.getElementById('tvBtnRun').disabled = !!(st.job && st.job.running);
+  document.getElementById('tvBtnStop').style.display = (st.job && st.job.running) ? '' : 'none';
+}
+function tvFillProg(j){
+  const prog = document.getElementById('tvProg');
+  if (!j || (!j.running && !j.done)) { if (!j || !j.done) prog.classList.remove('show'); return; }
+  prog.classList.add('show');
+  document.getElementById('tvDone').textContent = j.done;
+  document.getElementById('tvAll').textContent = j.all;
+  document.getElementById('tvPass').textContent = j.pass;
+  document.getElementById('tvFail').textContent = j.fail;
+  document.getElementById('tvSkip').textContent = j.skip;
+  document.getElementById('tvAvg').textContent = j.avg != null ? j.avg + ' ms' : '—';
+  document.getElementById('tvCur').textContent = j.running ? ('正在测试 ' + (j.cur || '')) : (j.error ? ('错误: ' + j.error) : '完成');
+  document.getElementById('tvPbar').style.width = j.all ? (j.done / j.all * 100) + '%' : '0';
+}
+function tvMarkTrend(key, st){
+  if (tvPrev[key] === st) return;
+  tvPrev[key] = st;
+  (tvTrend[key] = tvTrend[key] || []).push(st === 'pass' ? 'p' : 'f');
+  if (tvTrend[key].length > 8) tvTrend[key].shift();
+}
+function tvStartPoll(){
+  tvStopPoll();
+  tvPoll = setInterval(async () => {
+    try {
+      tvStatus = await tvApi('/api/tester/status');
+      const j = tvStatus.job || {};
+      for (const k of Object.keys(j.results || {})) { const rs = j.results[k]; if (rs.st==='pass'||rs.st==='fail') tvMarkTrend(k, rs.st); }
+      tvFillProg(j);
+      tvRender();
+      if (j.running) {
+        if (tvStatus.bin && tvStatus.bin.downloading) tvApplyStatus();
+      } else {
+        tvStopPoll();
+        tvApplyStatus();
+        // 一轮结束：抓明细 + 刷历史
+        tvLastDetail = { results: j.results || {}, time: new Date() };
+        tvHistData = await tvApi('/api/tester/history');
+        tvRenderHist();
+        const msg = j.error ? `拨测出错: ${j.error}` : `<b>本轮完成</b>：${j.pass} 通 / ${j.fail} 失败 / ${j.skip} 跳过${j.avg!=null?' · 平均 '+j.avg+' ms':''}`;
+        showToast(msg, j.error ? 'err' : 'ok', 4000);
+      }
+    } catch(e){}
+  }, 1000);
+}
+function tvStopPoll(){ if (tvPoll) { clearInterval(tvPoll); tvPoll = null; } }
+
+function tvRunAll(){
+  const body = {
+    onlyEnabled: document.getElementById('tvOnlyOn').checked,
+    concurrency: +document.getElementById('tvConc').value,
+    timeout: +document.getElementById('tvTmo').value,
+    targetMode: document.getElementById('tvTgt').value,
+    customTarget: document.getElementById('tvTgtUrl').value.trim()
+  };
+  tvApi('/api/tester/run', { method:'POST', body: JSON.stringify(body) }).then(r => {
+    if (!r.ok) return showToast(r.error || '启动失败', 'err');
+    tvStartPoll();
+    document.getElementById('tvProg').classList.add('show');
+  }).catch(e => showToast('启动失败: ' + e.message, 'err'));
+}
+function tvStop(){ tvApi('/api/tester/stop', { method:'POST', body:'{}' }); }
+function tvSingle(key){
+  if (tvStatus && tvStatus.job && tvStatus.job.running) return;
+  const body = { keys:[key], onlyEnabled:false,
+    concurrency:1, timeout:+document.getElementById('tvTmo').value,
+    targetMode: document.getElementById('tvTgt').value, customTarget: document.getElementById('tvTgtUrl').value.trim() };
+  tvApi('/api/tester/run', { method:'POST', body: JSON.stringify(body) }).then(r => {
+    if (!r.ok) return showToast(r.error || '启动失败', 'err');
+    tvStartPoll();
+    document.getElementById('tvProg').classList.add('show');
+  }).catch(e => showToast('启动失败: ' + e.message, 'err'));
+}
+
+/* 目标自定义 */
+function tvEffectiveTarget(){
+  const mode = document.getElementById('tvTgt').value;
+  if (mode === 'custom') { let v = document.getElementById('tvTgtUrl').value.trim(); if (v && !/^https?:\/\//.test(v)) v = 'http://' + v; return v; }
+  return mode === 'cloudflare' ? 'http://cp.cloudflare.com' : 'http://www.gstatic.com/generate_204';
+}
+function tvTgtChanged(){
+  const custom = document.getElementById('tvTgt').value === 'custom';
+  document.getElementById('tvTgtUrl').style.display = custom ? '' : 'none';
+  tvTgtHint();
+}
+function tvTgtHint(){
+  const el = document.getElementById('tvTgtHint');
+  if (document.getElementById('tvTgt').value !== 'custom') { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const v = tvEffectiveTarget();
+  if (!v) { el.innerHTML = '<span style="color:#B76E00">请输入目标 URL；留空时批量测试会提示错误</span>'; return; }
+  try { const u = new URL(v); el.innerHTML = `实际请求 <b style="color:#3B76E0">${tvEsc(v)}</b>（主机 ${tvEsc(u.host)}） · HTTP <b>2xx/3xx</b> 视为通过`; }
+  catch(e){ el.innerHTML = '<span style="color:#C2503D">URL 格式不合法</span>'; }
+}
+
+/* 定时 */
+function tvToggleSched(){
+  const on = !document.getElementById('tvSchSw').classList.contains('on');
+  const minutes = Math.max(1, +document.getElementById('tvSchMin').value || 30);
+  tvApi('/api/tester/settings', { method:'POST', body: JSON.stringify({ scheduleEnabled: on, scheduleMinutes: minutes }) }).then(r => {
+    if (r.ok && r.settings) {
+      document.getElementById('tvSchSw').classList.toggle('on', !!r.settings.scheduleEnabled);
+      tvNextRunTick(r.settings.nextRunAt, r.settings.scheduleEnabled);
+    }
+    showToast(on ? `定时测试已开启：每 ${minutes} 分钟一轮` : '定时测试已关闭', 'ok');
+  }).catch(e => showToast('保存失败: ' + e.message, 'err'));
+}
+let tvNextTimer = null;
+function tvNextRunTick(nextAt, enabled){
+  clearInterval(tvNextTimer);
+  const box = document.getElementById('tvNextRun');
+  if (!enabled || !nextAt) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  const tick = () => {
+    const left = Math.max(0, Math.round((nextAt - Date.now()) / 1000));
+    const m = Math.floor(left/60), s2 = left%60;
+    document.getElementById('tvNextT').textContent = `${String(m).padStart(2,'0')}:${String(s2).padStart(2,'0')}`;
+  };
+  tick(); tvNextTimer = setInterval(tick, 1000);
+}
+
+/* 渲染 */
+function tvTrendHtml(key){
+  const t = tvTrend[key] || [];
+  let cells = []; for (let i=0;i<8;i++) cells.push(t[t.length-8+i]);
+  return '<span class="tr8">' + cells.map(x=>`<i class="${x||''}"></i>`).join('') + '</span>';
+}
+function tvRender(){
+  const body = document.getElementById('tvBody'); if (!body) return;
+  const fSv = document.getElementById('tvFsv').value, fFail = document.getElementById('tvFfail').checked;
+  const res = (tvStatus && tvStatus.job && tvStatus.job.results) || {};
+  let html = '';
+  Object.values(SERVERS).forEach(sv => {
+    if (fSv && sv.label !== fSv) return;
+    let svHtml = '';
+    sv.inbounds.forEach(ib => {
+      const cl = ib.clients.filter(c => !fFail || (res[`${sv.id}|${ib.rid}|${c.email}`]||{}).st === 'fail');
+      if (!cl.length) return;
+      svHtml += `<tr class="ibRow"><td colspan="8">└ ${tvEsc(ib.tag || ib.name)} · 端口 ${ib.port} · ${tvEsc(ib.protocol)}${ib.enabled?'':' · 入站已停用'}</td></tr>`;
+      cl.forEach(c => { svHtml += tvRowHtml(sv, ib, c, res); });
+    });
+    if (svHtml) html += `<tr class="svRow"><td colspan="8">🌐 ${tvEsc(sv.label)} <span style="color:#A6ACBA;font-weight:400">${tvEsc(sv.host||'')}</span></td></tr>` + svHtml;
+  });
+  body.innerHTML = html || '<tr><td colspan="8"><div class="tempty">没有匹配的客户端（数据刷新后自动更新）</div></td></tr>';
+}
+function tvRowHtml(sv, ib, c, res){
+  const key = `${sv.id}|${ib.rid}|${c.email}`;
+  const rs = res[key] || { st:'idle' };
+  const st = rs.st || 'idle';
+  const stCls = { idle:'idle', run:'run', pass:'pass', fail:'fail', skip:'skip' }[st] || 'idle';
+  const lat = st==='pass' ? `<span style="font-weight:600" class="cPass">${rs.lat} ms</span>`
+    : st==='fail' ? `<span class="errTx" title="${tvEsc(rs.err)}">${tvEsc(rs.err.length>10 ? rs.err.slice(0,10)+'…' : rs.err)}</span>`
+    : st==='skip' ? '<span style="color:#A6ACBA">跳过</span>' : '<span style="color:#C3C9D4">—</span>';
+  const last = (st==='pass'||st==='fail') ? new Date().toLocaleTimeString('zh-CN',{hour12:false}) : '—';
+  const running = tvStatus && tvStatus.job && tvStatus.job.running;
+  return `<tr>
+    <td><span class="st ${stCls}"></span></td>
+    <td style="font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${tvEsc(c.email)}">${tvEsc(c.email)}</td>
+    <td style="color:#7C8AA5">${tvEsc(ib.protocol)} / ${ib.port}</td>
+    <td>${lat}</td>
+    <td style="color:#8A90A0;font-size:11px;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${st==='fail'?tvEsc(rs.err):(st==='pass'?'HTTP 2xx/3xx · 通过':'—')}</td>
+    <td>${tvTrendHtml(key)}</td>
+    <td style="color:#8A90A0;font-size:11px">${last}</td>
+    <td><button class="mini" onclick="tvSingle('${tvEsc(key).replace(/'/g,'&#39;')}')" ${running?'disabled':''}>测</button></td>
+  </tr>`;
+}
+function tvRenderHist(){
+  const box = document.getElementById('tvHist');
+  document.getElementById('tvHcount').textContent = tvHistData.length + ' 条';
+  if (!tvHistData.length) { box.innerHTML = '<div class="tempty">还没有测试记录</div>'; return; }
+  box.innerHTML = tvHistData.map(h => {
+    const detail = tvLastDetail ? Object.entries(tvLastDetail.results).filter(([k,v]) => v.st==='pass'||v.st==='fail')
+      .map(([k,v]) => { const [svId,,em] = k.split('|'); const sv = SERVERS[svId]||{};
+        return `<div>${v.st==='pass'?'<span class="cPass">✓</span>':'<span class="cFail">✗</span>'} ${tvEsc(sv.label||svId)} · ${tvEsc(em)} <span style="color:#A6ACBA">${v.st==='pass'?v.lat+' ms':tvEsc(v.err)}</span></div>`; }).join('') : '<div class="tempty">（明细仅保留最近一轮）</div>';
+    return `<div class="hItem" onclick="this.classList.toggle('open')">
+      <div class="r1">
+        <span class="t">${tvEsc(new Date(h.time).toLocaleString('zh-CN',{hour12:false}))}</span>
+        <span class="cPass">✓ ${h.pass}</span><span class="cFail">✗ ${h.fail}</span><span class="cSkip">○ ${h.skip}</span>
+        <span>平均 ${h.avg} ms</span><span style="color:#A6ACBA">耗时 ${h.durationS}s</span>
+        ${h.aborted?'<span class="cFail">（手动停止）</span>':''}${h.demo?'<span class="cSkip">（演示）</span>':''}
+      </div>
+      <div class="r2">${detail}</div>
+    </div>`;
+  }).join('');
+}
 
 /* ==================== 启动 ==================== */
 document.getElementById('gateBtn').onclick = gateSubmit;

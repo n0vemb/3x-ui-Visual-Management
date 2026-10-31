@@ -811,6 +811,52 @@ http.createServer(async (req2, res) => {
     return res.end(JSON.stringify({ privateKey: b64u(privRaw), publicKey: b64u(pubRaw) }));
   }
 
+  /* ==================== 客户端批量拨测 ==================== */
+  if (u.pathname === '/api/tester/status') {
+    if (!authOK(req2)) { res.writeHead(401); return res.end('unauthorized'); }
+    const s = tester.loadSettings();
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ demo: !!cfg.demo, bin: tester.binStatus(), job: tester.jobSnapshot(),
+      settings: { scheduleEnabled: s.scheduleEnabled, scheduleMinutes: s.scheduleMinutes, concurrency: s.concurrency, timeout: s.timeout, targetMode: s.targetMode, customTarget: s.customTarget },
+      nextRunAt: s.nextRunAt || 0 }));
+  }
+  if (u.pathname === '/api/tester/run' && req2.method === 'POST') {
+    if (!authOK(req2)) { res.writeHead(401); return res.end('unauthorized'); }
+    const body = await readBody(req2);
+    const r = await tester.runBatch(body || {});
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify(r));
+  }
+  if (u.pathname === '/api/tester/stop' && req2.method === 'POST') {
+    if (!authOK(req2)) { res.writeHead(401); return res.end('unauthorized'); }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ ok: tester.stopJob() }));
+  }
+  if (u.pathname === '/api/tester/download' && req2.method === 'POST') {
+    if (!authOK(req2)) { res.writeHead(401); return res.end('unauthorized'); }
+    try {
+      const r = await tester.downloadBin();
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify(r));
+    } catch (e) {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+  }
+  if (u.pathname === '/api/tester/history') {
+    if (!authOK(req2)) { res.writeHead(401); return res.end('unauthorized'); }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify(tester.history(30)));
+  }
+  if (u.pathname === '/api/tester/settings' && req2.method === 'POST') {
+    if (!authOK(req2)) { res.writeHead(401); return res.end('unauthorized'); }
+    const body = await readBody(req2);
+    if (!body) { res.writeHead(400); return res.end('bad json'); }
+    const s = tester.saveSettings(body);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ ok: true, settings: s }));
+  }
+
   let f = u.pathname === '/' ? '/index.html' : decodeURIComponent(u.pathname);
   f = path.join(ROOT, 'public', path.normalize(f));
   if (!f.startsWith(path.join(ROOT, 'public'))) { res.writeHead(403); return res.end(); }
@@ -822,6 +868,12 @@ http.createServer(async (req2, res) => {
 }).listen(PORT, () => {
   console.log(`3x-ui 管理器已启动: http://localhost:${PORT}${cfg.demo ? '（演示模式）' : ''}`);
 });
+
+// ===== 客户端批量拨测引擎 =====
+const tester = require('./tester');
+tester.init({ ROOT, getCfg: () => cfg, callPanel, log: (...a) => console.log('[tester]', ...a) });
+tester.setStateGetter(() => state.servers);
+tester.initScheduler(() => tester.runBatch({}));
 
 // 首次立即拉取，之后按 pollInterval 轮询
 refresh();
