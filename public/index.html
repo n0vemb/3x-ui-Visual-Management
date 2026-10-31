@@ -21,6 +21,7 @@
   .v-blue{color:#4262FF} .v-teal{color:#0FBCB0} .v-dark{color:#1C1C1E} .v-green{color:#00B473} .v-red{color:#E5484D}
   /* ===== 标签页 ===== */
   .tabs { display:flex; gap:8px; padding:10px 24px 14px; align-items:center; flex-wrap:wrap; }
+  body.tvscroll .tabs { position:sticky; top:0; z-index:50; background:linear-gradient(#F4F6FA 70%, rgba(244,246,250,0)); }
   .tab { display:flex; gap:8px; align-items:center; padding:8px 14px; border-radius:8px; font-size:13px; color:#555A6A; cursor:pointer; user-select:none; }
   .tab.active { background:#fff; border:1px solid #E4E7EE; font-weight:600; color:#1C1C1E; box-shadow:0 2px 6px rgba(28,28,46,.05); }
   .tab:not(.active):hover { background:#EDEFF4; }
@@ -1761,7 +1762,11 @@ function showTest(v){
   testMode = v;
   document.querySelector('.canvas-wrap').style.display = v ? 'none' : '';
   document.getElementById('testView').style.display = v ? '' : 'none';
-  if (v) { tvInit(); } else { tvStopPoll(); }
+  // 拨测页内容超出一屏，切进去时放开整页滚动；回画布时收回
+  document.body.classList.toggle('tvscroll', v);
+  document.body.style.overflow = v ? 'auto' : '';
+  document.body.style.height = v ? 'auto' : '';
+  if (v) { window.scrollTo(0, 0); tvInit(); } else { tvStopPoll(); }
   renderTabs();
 }
 function tvApi(path, opts={}){
