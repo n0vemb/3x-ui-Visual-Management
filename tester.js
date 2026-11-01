@@ -536,4 +536,4 @@ function initScheduler(triggerRun) {
   }, 10000);
 }
 
-module.exports = { init, setStateGetter, binStatus, downloadBin, runBatch, stopJob, jobSnapshot, history, loadSettings, saveSettings, effectiveTarget, buildQueue, initScheduler };
+module.exports = { init, setStateGetter, binStatus, downloadBin, runBatch, stopJob, jobSnapshot, history, loadSettings, saveSettings, effectiveTarget, buildQueue, initScheduler, linkToOutbound, socksConnect, BIN_PATH };
