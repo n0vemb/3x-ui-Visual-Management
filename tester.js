@@ -231,7 +231,7 @@ function parseLink(link) {
     };
     if (q.get('pqv')) stream.realitySettings.mldsa65Verify = q.get('pqv');
   } else if (stream.security === 'tls') {
-    stream.tlsSettings = { serverName: q.get('sni') || u.hostname, fingerprint: q.get('fp') || 'chrome', allowInsecure: true };
+    stream.tlsSettings = { serverName: q.get('sni') || u.hostname, fingerprint: q.get('fp') || 'chrome' };
   }
   if (stream.network === 'ws') stream.wsSettings = { path: q.get('path') || '/', headers: q.get('host') ? { Host: q.get('host') } : {} };
   if (stream.network === 'grpc') stream.grpcSettings = { serviceName: q.get('serviceName') || '', multiMode: false };
@@ -239,7 +239,7 @@ function parseLink(link) {
 }
 function streamFromVmess(j) {
   const stream = { network: j.net || 'tcp', security: j.tls === 'tls' ? 'tls' : 'none' };
-  if (stream.security === 'tls') stream.tlsSettings = { serverName: j.sni || '', fingerprint: j.fp || 'chrome', allowInsecure: true };
+  if (stream.security === 'tls') stream.tlsSettings = { serverName: j.sni || '', fingerprint: j.fp || 'chrome' };
   if (stream.network === 'ws') stream.wsSettings = { path: j.path || '/', headers: j.host ? { Host: j.host } : {} };
   if (stream.network === 'grpc') stream.grpcSettings = { serviceName: j.path || '', multiMode: false };
   return stream;
