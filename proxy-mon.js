@@ -1,39 +1,39 @@
 #!/usr/bin/env node
 /**
- * proxy-mon.js — Mac 代理活性持续检测工具（零依赖）
+ * proxy-mon.js — 代理活性持续检测工具（零依赖，Mac/服务器通用）
  *
  * 用法：
- *   # 检测一个已有代理（本地客户端端口或远程 SOCKS/HTTP 代理）
+ *   # 检测一个已有代理（本地客户端端口或远程 SOCKS/HTTP 代理，支持 user:pass@）
  *   node proxy-mon.js --proxy socks5://127.0.0.1:1080
  *   node proxy-mon.js --proxy http://127.0.0.1:1087
  *
- *   # 直接检测一条分享链接（自动下载 xray-core，本地起 SOCKS 出口再探测）
+ *   # 直接检测分享链接（自动下载 xray-core，本地起 SOCKS 出口再探测）
  *   node proxy-mon.js --link "vless://uuid@host:port?..."
- *   node proxy-mon.js --linkfile links.txt
+ *   node proxy-mon.js --linkfile links.txt        # 一行一条链接，# 开头为注释，支持多条
  *
  * 常用参数：
- *   --url     http://www.gstatic.com/generate_204   检测目标（默认 gstatic 204）
+ *   --url     http://www.gstatic.com/generate_204   检测目标
  *   --interval 30                                   检测间隔秒（默认 30）
  *   --timeout  8                                     单次超时秒（默认 8）
- *   --port     23456                                 link 模式本地 SOCKS 端口
+ *   --port     23456                                 链接模式本地 SOCKS 起始端口
  *   --once                                           只测一轮就退出
- *   --no-notify                                      关闭 macOS 通知（掉线/恢复提醒）
+ *   --no-notify                                      关闭 macOS 通知
  *   --no-sound                                       通知不带声音
  *
- * 判定逻辑：每轮同时测「代理」和「直连」两条路：
+ * 判定逻辑：每轮同时测「代理」和「直连」：
  *   代理通                 → UP
- *   代理不通 + 直连通      → PROXY DOWN（代理/节点问题）
- *   代理不通 + 直连不通    → NETWORK DOWN（本机断网，不算代理的锅）
+ *   代理不通 + 直连通      → PROXY_DOWN（代理/节点问题）
+ *   代理不通 + 直连不通    → NET_DOWN（本机断网，不算代理的锅）
  *
- * 状态翻转时弹 macOS 通知 + 响一声；结果追加写入 proxy-mon.log.jsonl
+ * 状态翻转弹通知（macOS）；结果追加写入 proxy-mon.log.jsonl
  */
 'use strict';
 const path = require('path');
 const net = require('net');
 const tls = require('tls');
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
-const os = require('os');
 const { spawn, execFile } = require('child_process');
 
 /* ---------- 参数解析 ---------- */
@@ -50,8 +50,9 @@ const OPT = parseArgs();
 
 const INTERVAL = Math.max(5, parseInt(OPT.interval || '30', 10)) * 1000;
 const TIMEOUT = Math.max(2, parseInt(OPT.timeout || '8', 10)) * 1000;
+const BASE_PORT = parseInt(OPT.port || '23456', 10);
 const TARGET = (() => {
-  let u = OPT.url || 'http://www.gstatic.com/generate_204';
+  let u = OPT.url || 'https://www.gstatic.com/generate_204';
   if (!/^https?:\/\//.test(u)) u = 'http://' + u;
   return u;
 })();
@@ -63,57 +64,58 @@ if (!OPT.proxy && !OPT.link && !OPT.linkfile) {
   process.exit(1);
 }
 
-/* ---------- 复用拨测引擎（链接解析 / socks 握手 / xray 下载） ---------- */
-const testerPath = path.join(__dirname, 'tester.js');
-const hasTester = fs.existsSync(testerPath);
+/* ---------- 复用拨测引擎（链接解析 / xray 下载，link 模式需要） ---------- */
+const hasTester = fs.existsSync(path.join(__dirname, 'tester.js'));
 let tester = null;
-if (hasTester) {
-  tester = require('./tester.js');
-  tester.init({ ROOT: __dirname }); // bin/xray 固定放本项目目录，与 cwd 无关
-}
+if (hasTester) { tester = require('./tester.js'); tester.init({ ROOT: __dirname }); }
 
 /* ---------- 目标解析 ---------- */
 const t = new URL(TARGET);
 const T_HOST = t.hostname, T_PORT = +t.port || (t.protocol === 'https:' ? 443 : 80), T_HTTPS = t.protocol === 'https:';
 
-/* ---------- 代理对象 ---------- */
-let MODE = 'socks';           // socks | http
-let PROXY_HOST = '127.0.0.1', PROXY_PORT = 0, PROXY_AUTH = null;
-let LINK_TAG = '';
-let xrayProc = null;
+/* ---------- 检测对象（支持多条） ---------- */
+const SOURCES = []; // { kind:'socks'|'http', host, port, auth, tag, outbound }
 
 if (OPT.proxy) {
   const p = new URL(OPT.proxy);
-  MODE = p.protocol.replace(':', '') === 'http' ? 'http' : 'socks';
-  PROXY_HOST = p.hostname || '127.0.0.1';
-  PROXY_PORT = +p.port;
-  if (p.username) PROXY_AUTH = { user: decodeURIComponent(p.username), pass: decodeURIComponent(p.password || '') };
-  if (!PROXY_PORT) { console.error('代理地址缺少端口'); process.exit(1); }
-  LINK_TAG = `proxy ${PROXY_HOST}:${PROXY_PORT}(${MODE})`;
+  const kind = p.protocol.replace(':', '') === 'http' ? 'http' : 'socks';
+  const host = p.hostname || '127.0.0.1', port = +p.port;
+  if (!port) { console.error('代理地址缺少端口'); process.exit(1); }
+  const auth = p.username ? { user: decodeURIComponent(p.username), pass: decodeURIComponent(p.password || '') } : null;
+  SOURCES.push({ kind, host, port, auth, tag: `proxy ${host}:${port}(${kind})` });
 } else {
-  // link / linkfile 模式：本地起 xray
-  MODE = 'socks';
-  PROXY_PORT = parseInt(OPT.port || '23456', 10);
-}
-
-/* ---------- 链接模式：准备 xray ---------- */
-async function startXray() {
-  if (!tester) { console.error('link 模式需要同目录的 tester.js（xray 下载/链接解析）'); process.exit(1); }
-  let raw = OPT.link || '';
+  let raws = [];
+  if (OPT.link) raws = [OPT.link.trim()];
   if (OPT.linkfile) {
-    raw = fs.readFileSync(OPT.linkfile, 'utf8').split('\n').map(s => s.trim())
-      .filter(s => s && !s.startsWith('#'))[0] || '';
+    raws = fs.readFileSync(OPT.linkfile, 'utf8').split('\n')
+      .map(s => s.trim()).filter(s => s && !s.startsWith('#'));
   }
-  if (!raw) { console.error('没有可用的分享链接'); process.exit(1); }
-  const outbound = tester.linkToOutbound(raw);
-  if (!outbound) { console.error('链接解析失败（仅支持 vmess/vless/trojan/ss）'); process.exit(1); }
-  LINK_TAG = decodeURIComponent((raw.split('#')[1] || '').replace(/\+/g, ' ')) ||
-    `${outbound.settings?.vnext?.[0]?.address || outbound.settings?.servers?.[0]?.address || '?'}:${outbound.settings?.vnext?.[0]?.port || outbound.settings?.servers?.[0]?.port || '?'}`;
-  const conf = {
-    log: { loglevel: 'warning' },
-    inbounds: [{ listen: '127.0.0.1', port: PROXY_PORT, protocol: 'socks', settings: { udp: false } }],
-    outbounds: [outbound, { protocol: 'freedom' }]
-  };
+  for (const raw of raws) {
+    const ob = tester ? tester.linkToOutbound(raw) : null;
+    if (!ob) { console.error('链接解析失败（仅支持 vmess/vless/trojan/ss）: ' + raw.slice(0, 60) + '...'); process.exit(1); }
+    const remark = decodeURIComponent((raw.split('#')[1] || '').replace(/\+/g, ' '));
+    const u = new URL(raw.replace(/^[a-z]+:\/\//, 'vless://')); // 统一 scheme 便于解析 host:port
+    const tag = remark || `${u.hostname}:${u.port}`;
+    SOURCES.push({ kind: 'socks', host: '127.0.0.1', port: 0, tag, outbound: ob });
+  }
+  if (!SOURCES.length) { console.error('没有可用的链接'); process.exit(1); }
+}
+const TAGW = Math.max(...SOURCES.map(s => s.tag.length), 8);
+
+/* ---------- 链接模式：准备 xray（N 个出站 + N 个本地 socks 入站 + 路由） ---------- */
+let xrayProc = null;
+async function startXray() {
+  if (!tester) { console.error('link 模式需要同目录的 tester.js'); process.exit(1); }
+  const inbounds = [], outbounds = [{ protocol: 'freedom', tag: 'direct' }], rules = [];
+  SOURCES.forEach((s, i) => {
+    const port = BASE_PORT + i;
+    s.port = port;
+    const ti = 'in' + i, oi = 'out' + i;
+    inbounds.push({ tag: ti, listen: '127.0.0.1', port, protocol: 'socks', settings: { auth: 'noauth', udp: false } });
+    outbounds.push({ ...s.outbound, tag: oi });
+    rules.push({ inboundTag: [ti], outboundTag: oi });
+  });
+  const conf = { log: { loglevel: 'warning' }, inbounds, outbounds, routing: { domainStrategy: 'AsIs', rules } };
   const confPath = path.join(__dirname, 'proxy-mon-xray.json');
   fs.writeFileSync(confPath, JSON.stringify(conf, null, 2));
 
@@ -126,7 +128,7 @@ async function startXray() {
   try { fs.chmodSync(binPath, 0o755); } catch (e) {}
 
   const launch = () => {
-    xrayProc = spawn(binPath, ['-c', confPath], { stdio: ['ignore', 'ignore', 'pipe'] });
+    xrayProc = spawn(binPath, ['run', '-c', confPath], { stdio: ['ignore', 'ignore', 'pipe'] });
     let errTail = '';
     if (xrayProc.stderr) xrayProc.stderr.on('data', d => { errTail = (errTail + d.toString()).slice(-500); });
     xrayProc.on('exit', c => {
@@ -138,10 +140,10 @@ async function startXray() {
     });
   };
   launch();
-  // 等本地端口就绪
+  // 等第一个本地端口就绪
   for (let i = 0; i < 40; i++) {
     const ok = await new Promise(r => {
-      const s = net.connect(PROXY_PORT, '127.0.0.1');
+      const s = net.connect(BASE_PORT, '127.0.0.1');
       s.once('connect', () => { s.destroy(); r(true); });
       s.once('error', () => r(false));
     });
@@ -151,8 +153,7 @@ async function startXray() {
   console.error('xray 本地端口未就绪'); process.exit(1);
 }
 
-/* ---------- HTTP 探测 ---------- */
-// socks5 握手（支持任意代理主机，带可选用户名/密码），成功 resolve 已建隧道的 socket
+/* ---------- socks5 握手（支持任意代理主机 + 可选认证），resolve {socket, leftover} ---------- */
 function socksConnectTo(proxyHost, proxyPort, host, port, timeoutMs, auth) {
   return new Promise((resolve, reject) => {
     const s = net.connect(proxyPort, proxyHost);
@@ -165,7 +166,7 @@ function socksConnectTo(proxyHost, proxyPort, host, port, timeoutMs, auth) {
       buf = Buffer.concat([buf, d]);
       if (stage === 0 && buf.length >= 2) {
         const m = buf[1]; buf = buf.subarray(2);
-        if (m === 0) { sendReq(); }
+        if (m === 0) sendReq();
         else if (m === 2 && auth) {
           stage = 1;
           const u = Buffer.from(auth.user), p = Buffer.from(auth.pass);
@@ -185,9 +186,9 @@ function socksConnectTo(proxyHost, proxyPort, host, port, timeoutMs, auth) {
         if (buf.length < need) return; // 继续等
         clearTimeout(to);
         if (buf[1] !== 0) return fail('代理链路被拒（目标不可达或节点无效）');
-        const leftover = buf.subarray(need);
+        const leftover = Buffer.from(buf.subarray(need));
         s.removeAllListeners('data');
-        resolve({ socket: s, leftover: Buffer.from(leftover) });
+        resolve({ socket: s, leftover });
       }
     });
     function sendReq() {
@@ -201,7 +202,7 @@ function socksConnectTo(proxyHost, proxyPort, host, port, timeoutMs, auth) {
   });
 }
 
-// 在已建立的 socket 上发 HTTP 请求并读响应头（leftover = 握手阶段残留字节）
+/* ---------- HTTP 探测 ---------- */
 function httpOverSocket(socket, timeoutMs, leftover) {
   return new Promise((resolve, reject) => {
     let buf = '', done = false;
@@ -225,11 +226,11 @@ function httpOverSocket(socket, timeoutMs, leftover) {
   });
 }
 
-// 直连探测（不经过任何代理）
+// 直连探测（每轮共享一次）
 function checkDirect() {
   return new Promise(resolve => {
     const t0 = Date.now();
-    const mod = T_HTTPS ? tls : http;
+    const mod = T_HTTPS ? https : http;
     const req = mod.request({ host: T_HOST, port: T_PORT, path: t.pathname + t.search, method: 'GET',
       headers: { 'User-Agent': 'proxy-mon' }, timeout: TIMEOUT }, res => {
       res.resume();
@@ -241,20 +242,40 @@ function checkDirect() {
   });
 }
 
-// 经代理探测
-async function checkProxy() {
+// 经指定检测对象探测
+async function checkProxy(S) {
   const t0 = Date.now();
   try {
-    if (MODE === 'socks') {
-      const r = await socksConnectTo(PROXY_HOST, PROXY_PORT, T_HOST, T_PORT, TIMEOUT, PROXY_AUTH);
-      const status = await httpOverSocket(r.socket, TIMEOUT, r.leftover);
+    if (S.kind === 'socks') {
+      const sock = await socksConnectTo(S.host, S.port, T_HOST, T_PORT, TIMEOUT, S.auth);
+      // 探测方式与拨测引擎 httpProbe 一致：http.request + createConnection(隧道上按需套 TLS)
+      // 注意：不能用裸 socket 立刻写 GET —— 那会让 xray 把 vless 头和载荷打进同一个外层记录，
+      // 部分 Reality 服务端（如 US1 面板）对这种包形不响应
+      const status = await new Promise((resolve, reject) => {
+        const mod = T_HTTPS ? https : http;
+        let settled = false;
+        const done = (fn, v) => { if (!settled) { settled = true; clearTimeout(to); try { sock.destroy(); } catch (e) {} fn(v); } };
+        const to = setTimeout(() => done(reject, new Error('响应超时')), TIMEOUT);
+        const creOpts = () => T_HTTPS
+          ? tls.connect({ socket: sock, servername: T_HOST, rejectUnauthorized: false })
+          : sock;
+        const rq = mod.request({ host: T_HOST, port: T_PORT, path: t.pathname + t.search, method: 'GET',
+          headers: { 'User-Agent': 'proxy-mon' }, createConnection: creOpts, agent: false, timeout: TIMEOUT }, rs => {
+          rs.resume();
+          if (rs.statusCode < 400) done(resolve, rs.statusCode);
+          else done(reject, new Error('HTTP ' + rs.statusCode));
+        });
+        rq.on('timeout', () => done(reject, new Error('响应超时')));
+        rq.on('error', e => done(reject, new Error('请求错误: ' + e.message)));
+        rq.end();
+      });
       return { ok: status < 400, ms: Date.now() - t0, status };
     }
-    // http 代理：https 目标用 CONNECT，http 目标用绝对地址 GET
+    // http 代理
     return await new Promise(resolve => {
       const t0b = Date.now();
       if (T_HTTPS) {
-        const req = http.request({ host: PROXY_HOST, port: PROXY_PORT, method: 'CONNECT', path: `${T_HOST}:${T_PORT}`, timeout: TIMEOUT });
+        const req = http.request({ host: S.host, port: S.port, method: 'CONNECT', path: `${T_HOST}:${T_PORT}`, timeout: TIMEOUT });
         req.on('connect', (res, socket) => {
           if (res.statusCode !== 200) return resolve({ ok: false, ms: Date.now() - t0b, err: 'CONNECT ' + res.statusCode });
           const s = tls.connect({ socket, servername: T_HOST });
@@ -265,7 +286,7 @@ async function checkProxy() {
         req.on('error', e => resolve({ ok: false, ms: Date.now() - t0b, err: '代理连接失败: ' + e.message }));
         req.end();
       } else {
-        const req = http.request({ host: PROXY_HOST, port: PROXY_PORT, path: TARGET, method: 'GET',
+        const req = http.request({ host: S.host, port: S.port, path: TARGET, method: 'GET',
           headers: { Host: T_HOST, 'User-Agent': 'proxy-mon' }, timeout: TIMEOUT }, res => {
           res.resume();
           resolve({ ok: res.statusCode < 400, ms: Date.now() - t0b, status: res.statusCode });
@@ -284,7 +305,7 @@ async function checkProxy() {
 const C = { g: s => `\x1b[32m${s}\x1b[0m`, r: s => `\x1b[31m${s}\x1b[0m`, y: s => `\x1b[33m${s}\x1b[0m`, dim: s => `\x1b[2m${s}\x1b[0m` };
 
 function notify(title, msg) {
-  if (!NOTIFY) return;
+  if (!NOTIFY || process.platform !== 'darwin') return;
   const snd = SOUND ? ' sound name "Funk"' : '';
   execFile('osascript', ['-e', `display notification "${msg.replace(/"/g, "'")}" with title "${title}"${snd}`], () => {});
 }
@@ -293,65 +314,76 @@ const LOG = path.join(process.cwd(), 'proxy-mon.log.jsonl');
 function logLine(s) { console.log(`${new Date().toLocaleTimeString('zh-CN', { hour12: false })} ${s}`); }
 function logJSON(obj) { try { fs.appendFileSync(LOG, JSON.stringify({ t: new Date().toISOString(), ...obj }) + '\n'); } catch (e) {} }
 
-const hist = [];        // 最近结果 true/false
-let total = 0, pass = 0, fail = 0, downSince = 0, latSum = 0;
-let state = 'INIT';     // UP | PROXY_DOWN | NET_DOWN
+// 每个检测对象一套独立统计
+for (const S of SOURCES) Object.assign(S, { state: 'INIT', total: 0, pass: 0, fail: 0, latSum: 0, downSince: 0, hist: [] });
 
-function spark() { return hist.map(x => x ? C.g('▮') : C.r('▯')).join(''); }
-function uptime() { return total ? (pass / total * 100).toFixed(1) + '%' : '—'; }
-function avgLat() { return pass ? Math.round(latSum / pass) + 'ms' : '—'; }
+function spark(S) { return S.hist.map(x => x ? C.g('▮') : C.r('▯')).join(''); }
+function uptime(S) { return S.total ? (S.pass / S.total * 100).toFixed(1) + '%' : '—'; }
+function avgLat(S) { return S.pass ? Math.round(S.latSum / S.pass) + 'ms' : '—'; }
 
-async function tick() {
-  const [direct, proxy] = await Promise.all([checkDirect(), checkProxy()]);
-  total++;
-  if (proxy.ok) { pass++; latSum += proxy.ms; } else fail++;
+function updateState(S, direct, proxy) {
+  S.total++;
+  if (proxy.ok) { S.pass++; S.latSum += proxy.ms; } else S.fail++;
   let newState, color, detail;
   if (proxy.ok) {
     newState = 'UP'; color = C.g;
-    detail = `延迟 ${proxy.ms}ms (HTTP ${proxy.status})  直连${direct.ok ? ' ' + direct.ms + 'ms' : ' ✗'}`;
+    detail = `延迟 ${proxy.ms}ms (HTTP ${proxy.status})`;
   } else if (direct.ok) {
     newState = 'PROXY_DOWN'; color = C.r;
-    detail = `不通(${proxy.err || 'HTTP ' + proxy.status}) 但直连通 ${direct.ms}ms → 代理/节点问题`;
+    detail = `不通(${proxy.err || 'HTTP ' + proxy.status}) 直连通 ${direct.ms}ms → 代理/节点问题`;
   } else {
     newState = 'NET_DOWN'; color = C.y;
-    detail = '不通，且直连也不通 → 本机网络断了，不算代理的锅';
+    detail = '不通，直连也不通 → 本机断网';
   }
-  hist.push(proxy.ok); if (hist.length > 30) hist.shift();
-  logJSON({ state: newState, proxy_ok: proxy.ok, proxy_ms: proxy.ms, proxy_err: proxy.err || null, proxy_status: proxy.status || null, direct_ok: direct.ok, direct_ms: direct.ms, target: TARGET });
+  S.hist.push(proxy.ok); if (S.hist.length > 30) S.hist.shift();
+  logJSON({ link: S.tag, state: newState, proxy_ok: proxy.ok, proxy_ms: proxy.ms, proxy_err: proxy.err || null, proxy_status: proxy.status || null, direct_ok: direct.ok, target: TARGET });
 
-  if (newState !== state) {
-    if (state !== 'INIT') {
+  if (newState !== S.state) {
+    if (S.state !== 'INIT') {
       if (newState === 'PROXY_DOWN') {
-        notify('⚠️ 代理掉线', `${LINK_TAG} 不通（网络正常，代理问题）`);
-        logLine(C.r(`‼️  代理掉线：${LINK_TAG}`));
+        notify('⚠️ 代理掉线', `${S.tag} 不通（网络正常，代理问题）`);
+        logLine(C.r(`‼️  [${S.tag}] 代理掉线`));
       } else if (newState === 'NET_DOWN') {
-        notify('📵 本机断网', '代理与直连都不通');
+        notify('📵 本机断网', `${S.tag} 与直连都不通`);
         logLine(C.y('‼️  本机断网（代理、直连都不通）'));
       } else if (newState === 'UP') {
-        const dur = downSince ? Math.round((Date.now() - downSince) / 1000) : 0;
-        notify('✅ 代理恢复', `${LINK_TAG} 已恢复${dur ? `，故障 ${dur}s` : ''}`);
-        logLine(C.g(`✅ 代理恢复${dur ? `（故障持续 ${dur} 秒）` : ''}`));
+        const dur = S.downSince ? Math.round((Date.now() - S.downSince) / 1000) : 0;
+        notify('✅ 代理恢复', `${S.tag} 已恢复${dur ? `，故障 ${dur}s` : ''}`);
+        logLine(C.g(`✅ [${S.tag}] 代理恢复${dur ? `（故障 ${dur} 秒）` : ''}`));
       }
     }
-    downSince = newState === 'UP' ? 0 : (downSince || Date.now());
-    state = newState;
+    S.downSince = newState === 'UP' ? 0 : (S.downSince || Date.now());
+    S.state = newState;
   }
 
   const tag = newState === 'UP' ? color('✓') : color('✗');
   logLine(
     `${tag} ${color(newState.padEnd(11))}` +
-    `第 ${String(total).padStart(3)} 轮 | ` +
-    `成功 ${C.g(String(pass))} / 失败 ${fail > 0 ? C.r(String(fail)) : '0'} | ` +
-    `本次延迟 ${proxy.ok ? proxy.ms + 'ms' : '—'} | 平均 ${avgLat()} | 在线率 ${uptime()}  ${spark()}`
+    `[${S.tag.padEnd(TAGW)}] ` +
+    `第 ${String(S.total).padStart(3)} 轮 | ` +
+    `成功 ${C.g(String(S.pass))} / 失败 ${S.fail > 0 ? C.r(String(S.fail)) : '0'} | ` +
+    `本次 ${proxy.ok ? proxy.ms + 'ms' : '—'} | 平均 ${avgLat(S)} | 在线率 ${uptime(S)}  ${spark(S)}`
   );
+}
+
+async function tick() {
+  const direct = await checkDirect();
+  await Promise.all(SOURCES.map(async S => {
+    try {
+      const proxy = await checkProxy(S);
+      updateState(S, direct, proxy);
+    } catch (e) {
+      logLine(C.r(`[${S.tag}] 轮次异常: ` + e.message));
+    }
+  }));
 }
 
 /* ---------- 主循环 ---------- */
 let stopping = false;
 async function main() {
-  console.log(C.dim(`proxy-mon  目标=${TARGET}  间隔=${INTERVAL / 1000}s  超时=${TIMEOUT / 1000}s  日志=${LOG}`));
-  if (OPT.link || OPT.linkfile) await startXray();
-  console.log(C.dim(`检测对象: ${LINK_TAG || OPT.proxy || '(链接)'}`));
+  console.log(C.dim(`proxy-mon  目标=${TARGET}  间隔=${INTERVAL / 1000}s  超时=${TIMEOUT / 1000}s  对象=${SOURCES.length} 个  日志=${LOG}`));
+  SOURCES.forEach((S, i) => console.log(C.dim(`  · ${S.tag}${S.outbound ? ` (link, 本地端口 ${BASE_PORT + i})` : ''}`)));
+  if (!OPT.proxy) await startXray();
   console.log(C.dim('Ctrl+C 退出\n'));
   await tick();
   if (OPT.once) { shutdown(); return; }
@@ -362,7 +394,9 @@ async function main() {
 function shutdown() {
   if (stopping) return; stopping = true;
   console.log(`\n—— 检测汇总 ——`);
-  console.log(`总轮数 ${total} | 成功 ${pass} | 失败 ${fail} | 在线率 ${uptime()} | 平均延迟 ${avgLat()}`);
+  for (const S of SOURCES) {
+    console.log(`${S.tag.padEnd(TAGW)}  总轮数 ${S.total} | 成功 ${S.pass} | 失败 ${S.fail} | 在线率 ${uptime(S)} | 平均延迟 ${avgLat(S)}`);
+  }
   console.log(`日志: ${LOG}`);
   if (xrayProc) try { xrayProc.kill(); } catch (e) {}
   process.exit(0);
